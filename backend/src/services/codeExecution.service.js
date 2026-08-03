@@ -5,18 +5,23 @@
  * isolated temporary directory, applying time and memory limits
  * ("sandbox" runner).
  *
- * IMPORTANT (production note): this service runs submitted code in the
- * host's child_process layer; timeout + memory limits provide basic
- * protection, but for a real multi-tenant production environment, each run
- * should be isolated in its own network-disconnected Docker container (see
- * backend/docker/*.Dockerfile, which use --pids-limit for process-count
- * containment) or a micro-VM sandbox such as gVisor/Firecracker for genuine
- * isolation. Process-count limiting is intentionally NOT done here via
- * `ulimit -u`: that limit is per-*user*, not per-process-tree, so on a
- * shared host it can misfire depending on how many other processes/threads
- * the user already owns - a fork bomb here is instead bounded purely by
- * the wall-clock `timeout`, which is what backend/docker's --pids-limit is
- * for in a properly namespaced (per-container) production deployment.
+ * WHERE the code runs is decided by ./sandbox.js:
+ *
+ *   docker (default when a daemon is reachable) - every compile and every test
+ *     case runs in its own throwaway container: no network, read-only root
+ *     filesystem, memory/CPU caps, --pids-limit for genuine process-count
+ *     containment, all capabilities dropped, unprivileged uid. This is the
+ *     isolation boundary a multi-tenant deployment needs.
+ *
+ *   host - the pre-0.0.4 behaviour: a child process on this machine bounded by
+ *     a wall-clock timeout and `ulimit -v`. Note that process-count limiting is
+ *     deliberately NOT attempted here via `ulimit -u`, which is a per-*user*
+ *     rather than per-process-tree limit and can starve unrelated processes on
+ *     a shared host; a fork bomb is bounded only by the timeout. That is why
+ *     this backend is not safe for untrusted users - use docker.
+ *
+ * The command strings are identical in both backends, so compile/run semantics
+ * do not drift between them.
  */
 
 const { spawn } = require('child_process');
@@ -25,10 +30,18 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 require('dotenv').config();
+const { config } = require('../config/env');
+const sandbox = require('./sandbox');
 
-const TIME_LIMIT_SEC = Number(process.env.EXEC_TIME_LIMIT_SEC) || 5;
-const MEMORY_LIMIT_KB = Number(process.env.EXEC_MEMORY_LIMIT_KB) || 524288; // 512 MB
-const MAX_OUTPUT_CHARS = Number(process.env.EXEC_MAX_OUTPUT_CHARS) || 100000;
+const env = config();
+const TIME_LIMIT_SEC = env.EXEC_TIME_LIMIT_SEC;
+const MEMORY_LIMIT_KB = env.EXEC_MEMORY_LIMIT_KB;
+const MAX_OUTPUT_CHARS = env.EXEC_MAX_OUTPUT_CHARS;
+
+// The container runs as this unprivileged uid (matching `useradd -u 10001
+// runner` in backend/docker/*.Dockerfile).
+const SANDBOX_UID = 10001;
+const SANDBOX_GID = 10001;
 
 // Per-language config: filename, compile command (if any), run command.
 // NOTE: user code is NEVER embedded directly into a shell command; it is
@@ -76,7 +89,14 @@ function truncate(text) {
   return text.slice(0, MAX_OUTPUT_CHARS) + '\n... [output truncated]';
 }
 
-function runShell(command, cwd, stdin) {
+/**
+ * Spawns one process, collects its output and enforces a hard wall-clock cap.
+ *
+ * `onHardTimeout` exists for the docker backend: killing the `docker run`
+ * client does NOT stop the container it started, so the container has to be
+ * killed by name as well or it keeps burning CPU after we've given up on it.
+ */
+function spawnCollect(file, args, { cwd, stdin, onHardTimeout } = {}) {
   return new Promise((resolve) => {
     const start = Date.now();
     let stdout = '';
@@ -84,10 +104,11 @@ function runShell(command, cwd, stdin) {
     let killedForTimeout = false;
     let killedForOutput = false;
 
-    const child = spawn('bash', ['-c', command], { cwd });
+    const child = spawn(file, args, { cwd });
 
     const hardTimer = setTimeout(() => {
       killedForTimeout = true;
+      if (onHardTimeout) onHardTimeout();
       child.kill('SIGKILL');
     }, (TIME_LIMIT_SEC + 2) * 1000); // generous upper bound covering compile + run
 
@@ -140,22 +161,72 @@ function runShell(command, cwd, stdin) {
   });
 }
 
+/**
+ * Runs one compile/run command for a submission.
+ *
+ * The command string is identical for both backends - the docker backend just
+ * executes it inside a throwaway container instead of on this host, so
+ * compile and run semantics don't drift between the two.
+ */
+function runSandboxed(command, workDir, stdin, { language, backend }) {
+  if (backend !== 'docker') {
+    return spawnCollect('bash', ['-c', command], { cwd: workDir, stdin });
+  }
+
+  // Named so the container can still be killed if the CLI has to be SIGKILLed.
+  const containerName = `codecloud-run-${crypto.randomUUID()}`;
+  const memoryMb =
+    language === 'java' ? env.SANDBOX_JAVA_MEMORY_MB : env.SANDBOX_MEMORY_MB;
+
+  const args = sandbox.buildDockerArgs({
+    image: sandbox.imageFor(language),
+    workDir,
+    command,
+    containerName,
+    memoryMb,
+    cpus: env.SANDBOX_CPUS,
+    pidsLimit: env.SANDBOX_PIDS_LIMIT,
+    tmpfsMb: env.SANDBOX_TMPFS_MB,
+    uid: SANDBOX_UID,
+    gid: SANDBOX_GID,
+  });
+
+  return spawnCollect('docker', args, {
+    stdin,
+    onHardTimeout: () => {
+      // Fire-and-forget: we already have our answer (timed out), this is just
+      // making sure the container doesn't outlive it.
+      spawn('docker', ['kill', containerName], { stdio: 'ignore' }).on('error', () => {});
+    },
+  });
+}
+
 async function prepareWorkDir(language, code) {
   const config = LANGUAGE_CONFIG[language];
   if (!config) throw new Error(`Unsupported language: ${language}`);
   const workDir = path.join(os.tmpdir(), 'codecloud-exec', crypto.randomUUID());
   await fs.mkdir(workDir, { recursive: true });
   await fs.writeFile(path.join(workDir, config.filename), code, 'utf-8');
+  // The container runs as uid 10001, which is not the uid that owns this
+  // directory on the host, so it could not otherwise write the compiler's
+  // output here. The directory is a per-run random path that exists for a
+  // few seconds and is deleted in `cleanup`.
+  await fs.chmod(workDir, 0o777);
   return { workDir, config };
 }
 
-async function compileIfNeeded(config, workDir) {
+async function compileIfNeeded(config, workDir, ctx) {
   if (!config.compile) return { success: true, stderr: '' };
-  const result = await runShell(config.compile(workDir), workDir);
+  const result = await runSandboxed(config.compile(workDir), workDir, '', ctx);
   return {
     success: result.exitCode === 0 && !result.timedOut,
     stderr: result.stderr || result.stdout || 'Compilation error (no details available)',
   };
+}
+
+/** Wraps a language's run command in the same in-sandbox wall-clock timeout. */
+function runCommandFor(config, workDir) {
+  return `timeout ${TIME_LIMIT_SEC}s bash -c '${config.run(workDir).replace(/'/g, `'\\''`)}'`;
 }
 
 async function cleanup(workDir) {
@@ -166,9 +237,13 @@ async function cleanup(workDir) {
  * Single run - used by the "Run" button (with free-form stdin).
  */
 async function executeCode(language, code, stdin = '') {
+  const backend = await sandbox.resolveBackend();
+  sandbox._logBackendOnce(backend);
+  const ctx = { language, backend };
+
   const { workDir, config } = await prepareWorkDir(language, code);
   try {
-    const compileResult = await compileIfNeeded(config, workDir);
+    const compileResult = await compileIfNeeded(config, workDir, ctx);
     if (!compileResult.success) {
       return {
         stdout: '',
@@ -179,7 +254,7 @@ async function executeCode(language, code, stdin = '') {
         stage: 'compile',
       };
     }
-    const runResult = await runShell(`timeout ${TIME_LIMIT_SEC}s bash -c '${config.run(workDir).replace(/'/g, `'\\''`)}'`, workDir, stdin);
+    const runResult = await runSandboxed(runCommandFor(config, workDir), workDir, stdin, ctx);
     return { ...runResult, stage: 'run' };
   } finally {
     await cleanup(workDir);
@@ -192,9 +267,13 @@ async function executeCode(language, code, stdin = '') {
  * each test input.
  */
 async function runTestCases(language, code, testCases) {
+  const backend = await sandbox.resolveBackend();
+  sandbox._logBackendOnce(backend);
+  const ctx = { language, backend };
+
   const { workDir, config } = await prepareWorkDir(language, code);
   try {
-    const compileResult = await compileIfNeeded(config, workDir);
+    const compileResult = await compileIfNeeded(config, workDir, ctx);
     if (!compileResult.success) {
       return {
         results: testCases.map((tc) => ({
@@ -212,13 +291,17 @@ async function runTestCases(language, code, testCases) {
       };
     }
 
+    // One fresh container PER TEST CASE, not one per submission. Measured on a
+    // macOS dev machine: per-test containers cost ~159 ms/test versus ~82 ms
+    // for a single container reused via `docker exec` - i.e. the fast option is
+    // ~2x cheaper. The slower one is chosen deliberately: sharing a container
+    // across test cases lets a stray background process, a leftover file or an
+    // exhausted pid budget from one test change the result of the next, and a
+    // wrong grade is worse than a slower one. Grading is queued anyway, so
+    // nobody is waiting on the difference.
     const results = [];
     for (const tc of testCases) {
-      const r = await runShell(
-        `timeout ${TIME_LIMIT_SEC}s bash -c '${config.run(workDir).replace(/'/g, `'\\''`)}'`,
-        workDir,
-        tc.input || ''
-      );
+      const r = await runSandboxed(runCommandFor(config, workDir), workDir, tc.input || '', ctx);
       const passed =
         !r.timedOut && r.exitCode === 0 && normalizeOutput(r.stdout) === normalizeOutput(tc.expected_output);
       results.push({

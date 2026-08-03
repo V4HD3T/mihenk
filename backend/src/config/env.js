@@ -35,6 +35,20 @@ const schema = z.object({
   EXEC_MEMORY_LIMIT_KB: numeric(524288),
   EXEC_MAX_OUTPUT_CHARS: numeric(100000),
 
+  // How submitted code is isolated:
+  //   docker - every run happens in a throwaway, network-disconnected container
+  //   host   - run directly on this machine (timeout + memory limits only)
+  //   auto   - use docker when a working daemon is reachable, else host
+  // 'auto' is convenient for development but must never be used to serve
+  // untrusted users: it silently degrades to the weaker backend.
+  SANDBOX_MODE: z.enum(['docker', 'host', 'auto']).default('auto'),
+  SANDBOX_IMAGE_PREFIX: z.string().min(1).default('codecloud'),
+  SANDBOX_MEMORY_MB: numeric(256),
+  SANDBOX_JAVA_MEMORY_MB: numeric(384),
+  SANDBOX_CPUS: z.coerce.number().positive().default(0.5),
+  SANDBOX_PIDS_LIMIT: numeric(64),
+  SANDBOX_TMPFS_MB: numeric(16),
+
   REDIS_HOST: z.string().min(1).default('localhost'),
   REDIS_PORT: numeric(6379),
   WORKER_CONCURRENCY: numeric(4),

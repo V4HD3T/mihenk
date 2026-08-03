@@ -1,7 +1,7 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.0.3**
+**Version 0.0.4**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, and C code directly in the browser, and teachers create problems/exams, grade
@@ -31,7 +31,8 @@ redis-server &                # or: service redis-server start
 cd backend
 npm install
 cp .env.example .env
-npm test                    # automated suite (no PostgreSQL/Redis needed)
+npm run sandbox:build       # per-language execution containers (needs Docker)
+npm test                    # automated suite (no PostgreSQL/Redis/Docker needed)
 npm run dev                 # API + WebSocket -> http://localhost:4000
 npm run worker              # grading worker, in a separate terminal (run more to scale up)
 
@@ -42,10 +43,11 @@ cp .env.example .env
 npm run dev     # http://localhost:5173
 ```
 
-The server machine must have `python3`, `g++`/`gcc` (C++17/C17), a JDK (`javac`), `node`, and
-`redis-server` installed — see `backend/README.md` for details. To exercise the execution and
-similarity engines against those toolchains directly, run `npm run test:exec` and
-`npm run test:similarity`.
+**Running submitted code.** By default every compile and test case runs inside a throwaway,
+network-less Docker container (`SANDBOX_MODE=docker`), so the host needs Docker but no language
+toolchains. Set `SANDBOX_MODE=host` to run code directly on your machine instead — convenient
+without Docker, but it then needs `python3`, `g++`/`gcc`, a JDK and `node` installed, and it is
+not safe for untrusted users. See `backend/README.md`.
 
 **Accounts:** signing up creates a student. Teacher accounts require the server's
 `TEACHER_INVITE_CODE` (see `backend/README.md`) — the client cannot choose its own role.
@@ -63,6 +65,7 @@ similarity engines against those toolchains directly, run `npm run test:exec` an
 | Progress-tracking analytics dashboards | `/api/analytics/*` + Recharts visualizations |
 | Academic integrity (code similarity + exam monitoring) | `similarity.service.js` (Winnowing) + `/api/integrity/*` |
 | Cloud-native execution (scalable, matching the original "cloud computing" brief) | BullMQ/Redis queue + horizontally-scalable `npm run worker` processes |
+| Safe execution of untrusted code | Per-run Docker containers: no network, read-only rootfs, memory/CPU/pid limits, unprivileged uid |
 
 ## Scope and limitations of this release
 
@@ -75,13 +78,16 @@ per-IP rate limiting, security headers, an explicit CORS allowlist, structured l
 graceful shutdown, an automated test suite and CI — plus fixes for two bugs that made a fresh
 v0.0.2 install unable to accept a submission at all (see `CHANGELOG.md`).
 
-Before moving this to a publicly-accessible "cloud" environment with untrusted users, the main
-remaining piece is sandboxing (see "Cloud execution architecture" and "Sandbox architecture and
-security note" in `backend/README.md`): move code execution into separate,
-network-disconnected Docker containers, similar to the examples in `backend/docker/`. That's
-the one part of the original architecture notes this project doesn't run live, since it needs a
-container runtime. Also still worth adding: HTTPS, a managed PostgreSQL/Redis instance (e.g.
-RDS/ElastiCache), centralized log aggregation, and database-backed integration tests.
+v0.0.4 closed the last item from the original v0.0.1 production notes: submitted code now runs
+in per-run containers with no network, a read-only root filesystem, memory/CPU caps and a
+process limit. That containment is verified rather than assumed — `npm run sandbox:verify` runs
+real hostile submissions (fork bomb, memory bomb, outbound network, writes outside the work
+directory) and CI fails the build if any of them escapes.
+
+Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
+instance (e.g. RDS/ElastiCache), centralized log aggregation, database-backed integration tests,
+and — if the threat model warrants a stronger boundary than a shared kernel — gVisor or a
+Firecracker micro-VM under the container layer.
 
 ## Changelog
 

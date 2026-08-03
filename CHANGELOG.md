@@ -2,6 +2,70 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.0.4] - Container-Isolated Execution
+
+Closes the last open item from the original v0.0.1 production notes: submitted
+code no longer runs on the host.
+
+### Added
+- **Per-run Docker sandboxing.** Every compile and every test case executes in
+  its own throwaway container with `--network=none`, a read-only root
+  filesystem, a memory cap (with matching swap cap), a CPU share,
+  `--pids-limit`, `--cap-drop=ALL`, `--security-opt=no-new-privileges`, an
+  unprivileged uid, and a single bind mount for the run's work directory.
+  `backend/docker/*.Dockerfile` went from reference material to the images the
+  system actually runs on.
+- **`SANDBOX_MODE`** selects the backend: `docker` (required for untrusted
+  users), `host` (the pre-0.0.4 behaviour, development only), or `auto`.
+  `docker` **fails closed** - if no daemon is reachable, submissions error out
+  rather than silently running unconfined, because a grading failure is
+  recoverable and a silent loss of isolation is not.
+- **`npm run sandbox:build` / `sandbox:check`** build the five language images
+  and confirm each toolchain runs as the unprivileged container user.
+- **`npm run sandbox:verify`** pushes deliberately hostile submissions through
+  the real engine - outbound network, fork bomb, memory bomb, writes outside
+  the work directory, an infinite loop, a privilege-escalation attempt - and
+  exits non-zero if any escapes. **CI runs it on Linux on every push**, so a
+  regression in the security flags breaks the build instead of quietly
+  weakening the sandbox.
+- Unit tests pinning every security flag, so the lint/test job protects them
+  even though it has no Docker daemon.
+- Per-container tuning: `SANDBOX_MEMORY_MB`, `SANDBOX_JAVA_MEMORY_MB`,
+  `SANDBOX_CPUS`, `SANDBOX_PIDS_LIMIT`, `SANDBOX_TMPFS_MB`,
+  `SANDBOX_IMAGE_PREFIX`.
+
+### Verified
+Measured against real containers, not assumed: outbound network refused; host
+paths unreachable and `/etc/shadow` unreadable; writes outside the work
+directory refused; fork bomb stopped at the pid ceiling (62 of 64); memory bomb
+OOM-killed (exit 137); infinite loop cut off by the wall clock; uid stays 10001.
+All five languages compile and run correctly under the full flag set.
+
+### Changed
+- With `SANDBOX_MODE=docker` the host no longer needs any language toolchain -
+  compilers and runtimes live in the images. Only `SANDBOX_MODE=host` still
+  requires `python3`/`g++`/`gcc`/`javac`/`node` locally.
+- Grading uses **one container per test case rather than one per submission**.
+  Benchmarked at ~159 ms/test versus ~82 ms/test for reusing a container via
+  `docker exec`; the ~2x faster option was deliberately rejected because a
+  shared container lets a stray process, leftover file or exhausted pid budget
+  from one test change the result of the next, and a wrong grade is worse than
+  a slower one. Grading is queued, so nothing user-facing waits on it.
+  (Figures measured on macOS, where containers run in a VM; Linux is faster.)
+- On timeout the container is killed by name, not just the `docker run` client
+  - killing the client would otherwise leave the container running.
+
+### Known limitations (tracked for future versions)
+- Containers share the host kernel; a stronger boundary (gVisor, Firecracker)
+  and per-language seccomp profiles are the next step for a high-risk
+  deployment
+- `SANDBOX_MODE=host` depends on GNU coreutils' `timeout`, which macOS does not
+  ship, so that backend has never worked on a Mac (pre-existing since v0.0.1,
+  now documented). The docker backend works there, and is the default.
+- No course/enrollment model: problems and exams are still global to every user
+- Database-backed integration tests still to come
+- No password reset or email verification
+
 ## [0.0.3] - Correctness & Security Hardening
 
 No new end-user features. This release fixes two bugs that made a fresh install

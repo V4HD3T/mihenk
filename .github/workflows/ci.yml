@@ -26,6 +26,30 @@ jobs:
       # run before a handler reaches the database.
       - run: npm test
 
+  sandbox:
+    name: Sandbox isolation (real containers)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      # Only the python image is needed for the containment checks, and it is
+      # by far the smallest - building all five would add minutes for no extra
+      # signal about isolation.
+      - run: npm run sandbox:build python
+      - run: npm run sandbox:check python
+      # Runs real hostile submissions (network access, fork bomb, memory bomb,
+      # writes outside the work directory) and fails the build if any escapes.
+      # This is the check that would catch a regression in the security flags.
+      - run: npm run sandbox:verify
+
   frontend:
     name: Frontend (build)
     runs-on: ubuntu-latest

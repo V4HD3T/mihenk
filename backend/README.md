@@ -1,6 +1,6 @@
 # CodeCloud - Backend
 
-**Version 0.0.3**
+**Version 0.0.4**
 
 Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam System.
 
@@ -21,6 +21,9 @@ Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam
   plus tab-switch/paste monitoring during active exams
 - Hardened request handling (new in 0.0.3): schema-validated input, per-IP rate limiting,
   security headers, an origin allowlist, and structured request logging
+- **Container-isolated execution (new in 0.0.4):** every compile and test case runs in its own
+  throwaway Docker container with no network, a read-only root filesystem, memory/CPU caps and a
+  process limit - see "Sandbox architecture" below
 
 ## Setup
 
@@ -47,6 +50,20 @@ recreates every table):
 npm run migrate          # applies whatever this database is missing, in order
 npm run migrate:status   # shows applied vs pending without changing anything
 ```
+
+### Sandbox images
+
+Submitted code runs inside per-language containers, so build those images once per machine that
+runs a grading worker:
+
+```bash
+npm run sandbox:build     # builds all five (a few GB of base images the first time)
+npm run sandbox:check     # confirms each image's toolchain runs as the unprivileged user
+npm run sandbox:verify    # runs hostile submissions and fails if any escapes containment
+```
+
+Then set `SANDBOX_MODE=docker` in `.env`. Without Docker you can develop with `SANDBOX_MODE=host`,
+which runs code directly on your machine — fine for solo work, unsafe for untrusted users.
 
 ### Accounts and roles
 
@@ -78,8 +95,9 @@ submission in the `running` state.
 ### Tests and linting
 
 ```bash
-npm test               # automated suite - no PostgreSQL or Redis required
+npm test                 # automated suite - no PostgreSQL, Redis or Docker required
 npm run lint
+npm run sandbox:verify   # real containment checks - needs Docker and the sandbox images
 npm run test:exec        # live execution engine, needs python3/g++/gcc/javac/node installed
 npm run test:similarity  # similarity engine's own scenario checks
 ```
@@ -90,7 +108,13 @@ is what makes this possible). Database-backed integration tests are still to com
 
 ## Required system tools on the server
 
-The code execution engine expects the following three tools to be installed **on the server machine**:
+**With `SANDBOX_MODE=docker` (recommended):** only Docker is required. Every language toolchain
+lives inside its sandbox image, so the host needs no compilers at all.
+
+Ubuntu/Debian: `apt install docker.io redis-server`
+
+**With `SANDBOX_MODE=host`:** the toolchains must be installed on the machine itself, because
+submitted code runs directly on it:
 
 | Language | Required tool                        |
 |----------|----------------------------------------|
@@ -101,6 +125,15 @@ The code execution engine expects the following three tools to be installed **on
 | C        | `gcc` (with C17 support)               |
 
 Ubuntu/Debian: `apt install python3 g++ gcc openjdk-21-jdk-headless redis-server`
+
+It also needs GNU coreutils' `timeout`, which enforces the per-run wall clock. That is present
+on Linux but **not on macOS**, so `SANDBOX_MODE=host` does not work on a Mac out of the box —
+every run exits 127. Use `SANDBOX_MODE=docker` there (it works fine under Docker Desktop), or
+install coreutils if you specifically need the host backend. This applies equally to
+`npm run test:exec`.
+
+`npm run test:exec` and `npm run test:similarity` exercise the engines against the host
+toolchains directly, so they need the table above regardless of `SANDBOX_MODE`.
 
 ## API Endpoints (summary)
 
@@ -176,29 +209,62 @@ the shared Redis queue. The interactive "Run" button (`/api/submissions/execute`
 stays synchronous, since that's a single user waiting on one ad-hoc execution; the queue exists
 for the case that actually needs it, a burst of exam submissions arriving at once.
 
-## Sandbox architecture and security note
+## Sandbox architecture (containers, new in 0.0.4)
 
-`src/services/codeExecution.service.js` writes submitted code to a temporary directory, compiles
-it if needed (C++/Java/C), and runs it constrained by `timeout` plus a per-language memory limit
-(`ulimit -v`, or the runtime's own heap flag for Java/Node, which otherwise conflict with it).
-This is **sufficient protection for a single-machine prototype/demo** and has been tested against
-infinite loops, compile errors, and malformed output across all five languages.
+Every compile and every test case runs inside its own throwaway Docker container. This is the
+isolation boundary that makes it safe to accept code from people you don't trust — it closes the
+last open item from the original v0.0.1 production notes.
 
-One deliberate choice worth calling out: this service does **not** use `ulimit -u` (process-count
-limiting) to contain runaway forking. `ulimit -u` is a per-*user* limit on Linux, not a
-per-process-tree one - on a host where the same user already owns a non-trivial number of
-processes/threads (which a Node/JVM-heavy dev box easily does), setting it low from inside a
-spawned shell can unpredictably starve unrelated processes on that same host, not just the
-sandboxed one. Process-count containment belongs at the OS/container layer instead, correctly
-namespaced per-container - see `--pids-limit` in `backend/docker/*.Dockerfile`.
+`src/services/sandbox.js` builds the container invocation; `codeExecution.service.js` decides
+what command to run. The command string is identical in both backends, so compile/run semantics
+never drift between them.
 
-**Still recommended before production** (real, untrusted multi-tenant traffic): isolate every
-run in its own network-disconnected, resource-limited container, similar to the examples in
-`backend/docker/*.Dockerfile` (or a gVisor/Firecracker micro-VM) — this is the one piece from the
-v0.0.1 production notes that v0.0.3 doesn't yet close, since it requires a container runtime this
-project doesn't assume you have. The other half of that original recommendation, queueing and
-horizontally-scaled workers, was added in v0.0.2. Wiring the containers in is the next version's
-main job.
+**What each container gets:**
+
+| Flag | Why |
+|---|---|
+| `--network=none` | No network interface at all — submitted code cannot phone home, fetch a payload, or reach other services |
+| `--memory` / `--memory-swap` | Hard memory cap; equal swap stops the cap being escaped by spilling to swap |
+| `--pids-limit` | Correctly namespaced process-count containment — this is what makes a fork bomb a contained failure |
+| `--read-only` | Everything outside the mounted work directory is immutable |
+| `--tmpfs=/tmp:noexec,nosuid` | Compilers need scratch space; `noexec` stops a payload being written there and run |
+| `--cap-drop=ALL` + `--security-opt=no-new-privileges` | No capabilities, no escalation through setuid binaries |
+| `--user 10001:10001` | Unprivileged; never root |
+| single `-v` bind mount | Only the per-run work directory is exposed from the host |
+
+**Verifying it, rather than trusting it.** `npm run sandbox:verify` pushes deliberately hostile
+submissions through the real engine — outbound network, fork bomb, memory bomb, writes outside
+the work directory, an infinite loop, a privilege-escalation attempt — and exits non-zero if any
+of them escapes. CI runs it on Linux on every push, so a regression in the security flags breaks
+the build. The unit tests in `tests/sandbox.test.js` separately pin every flag above, since CI's
+lint/test job has no Docker daemon.
+
+Measured containment on the reference setup: network blocked, host paths unreachable, writes
+outside the work directory refused, fork bomb stopped at the pid ceiling, memory bomb OOM-killed
+(exit 137), infinite loop cut off by the wall clock, uid stays 10001.
+
+**One container per test case, not per submission.** Benchmarked on a macOS dev machine at ~159
+ms/test versus ~82 ms/test for reusing a single container via `docker exec` — the reuse option is
+about twice as fast and was deliberately not chosen. Sharing a container across test cases lets a
+stray background process, a leftover file or an exhausted pid budget from one test change the
+result of the next, and a wrong grade is worse than a slower one. Grading is queued, so nobody is
+waiting on the difference. (Those figures come from a Mac, where containers run inside a VM and
+bind mounts go through virtiofs; native Linux is faster.)
+
+**The host backend.** `SANDBOX_MODE=host` keeps the pre-0.0.4 behaviour — a child process bounded
+by `timeout` plus `ulimit -v`. It exists for development on machines without Docker and is **not
+safe for untrusted users**. Note that it deliberately does not attempt process-count limiting via
+`ulimit -u`: that limit is per-*user*, not per-process-tree, so on a host where the same user
+already owns many processes it can starve unrelated work instead of just the sandbox. Genuine
+process-count containment requires the container layer, which is exactly what `--pids-limit`
+provides above.
+
+`SANDBOX_MODE=docker` **fails closed**: if the daemon is unreachable, submissions error out
+instead of silently falling back to the weaker backend. `auto` does fall back, which is why it
+is for development only.
+
+**Still worth adding for a high-risk deployment:** a stronger kernel boundary than containers
+share — gVisor or a Firecracker micro-VM — plus seccomp profiles tuned per language.
 
 ## Environment Variables
 

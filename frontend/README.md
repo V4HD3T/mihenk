@@ -1,6 +1,6 @@
 # CodeCloud - Frontend
 
-**Version 0.0.3**
+**Version 0.0.4**
 
 React interface for the Cloud-Based Multi-Platform Coding Education and Exam System.
 
