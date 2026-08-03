@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  background-color: #F4F5F3;
+  color: #161A22;
+}
+
+body {
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+
+h1, h2, h3, .font-display {
+  font-family: 'Fraunces', serif;
+}
+
+code, pre, .font-mono-ui {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Bubble-sheet-inspired test result indicator: the platform's signature visual element */
+.result-bubble {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid #DEE1E6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.result-bubble.pending {
+  border-color: #DEE1E6;
+  background: transparent;
+}
+.result-bubble.pass {
+  border-color: #1F8A5F;
+  background: #1F8A5F;
+}
+.result-bubble.fail {
+  border-color: #C1443D;
+  background: #C1443D;
+}
+.result-bubble.timeout {
+  border-color: #C9862C;
+  background: #C9862C;
+}
+
+::selection {
+  background: #2B3A67;
+  color: white;
+}
+
+:focus-visible {
+  outline: 2px solid #2B3A67;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
