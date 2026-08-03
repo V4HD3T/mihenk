@@ -9,6 +9,8 @@ const EMPTY_PROBLEM = {
   starter_code_python: '',
   starter_code_cpp: '',
   starter_code_java: '',
+  starter_code_javascript: '',
+  starter_code_c: '',
   testCases: [{ input: '', expected_output: '', is_sample: true }],
 };
 
@@ -97,6 +99,24 @@ function ProblemForm({ onCreated }) {
           <textarea
             value={form.starter_code_java}
             onChange={(e) => setForm({ ...form, starter_code_java: e.target.value })}
+            rows={3}
+            className="w-full mt-1 px-3 py-2 rounded-card border border-line font-mono text-xs focus:border-primary outline-none"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-inkmuted uppercase tracking-wide">JavaScript starter code</label>
+          <textarea
+            value={form.starter_code_javascript}
+            onChange={(e) => setForm({ ...form, starter_code_javascript: e.target.value })}
+            rows={3}
+            className="w-full mt-1 px-3 py-2 rounded-card border border-line font-mono text-xs focus:border-primary outline-none"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-inkmuted uppercase tracking-wide">C starter code</label>
+          <textarea
+            value={form.starter_code_c}
+            onChange={(e) => setForm({ ...form, starter_code_c: e.target.value })}
             rows={3}
             className="w-full mt-1 px-3 py-2 rounded-card border border-line font-mono text-xs focus:border-primary outline-none"
           />
@@ -359,6 +379,12 @@ export default function TeacherPanel() {
                   <p className="text-xs text-inkmuted font-mono capitalize mt-1">{p.difficulty}</p>
                 </div>
                 <div className="flex gap-2">
+                  <Link
+                    to={`/teacher/similarity/${p.id}`}
+                    className="text-xs text-warning hover:underline whitespace-nowrap"
+                  >
+                    similarity
+                  </Link>
                   <Link
                     to={`/teacher/submissions/${p.id}`}
                     className="text-xs text-primary hover:underline whitespace-nowrap"

@@ -28,6 +28,16 @@ function ok(label, condition, detail) {
   console.log(java);
   ok('Java compiled and ran', java.stdout.includes('Hello World'));
 
+  console.log('\n=== 3b) JavaScript - Hello World ===');
+  const js = await executeCode('javascript', 'console.log("Hello World");\nconsole.log(2 + 2);', '');
+  console.log(js);
+  ok('JavaScript ran', js.stdout.includes('Hello World') && js.stdout.includes('4'));
+
+  console.log('\n=== 3c) C - Hello World ===');
+  const c = await executeCode('c', '#include <stdio.h>\nint main() { printf("Hello World\\n"); return 0; }', '');
+  console.log(c);
+  ok('C compiled and ran', c.stdout.includes('Hello World'));
+
   console.log('\n=== 4) Compile error (C++) ===');
   const cppErr = await executeCode('cpp', '#include <iostream>\nint main() { std::cout << "missing brace"; ', '');
   console.log({ stage: cppErr.stage, exitCode: cppErr.exitCode, stderrPreview: cppErr.stderr.slice(0, 120) });
@@ -67,13 +77,13 @@ public class Main {
   console.log({ timedOut: timeout.timedOut, elapsedMs: elapsed });
   ok('Infinite loop timed out within a reasonable duration', timeout.timedOut === true && elapsed < 10000);
 
-  console.log('\n=== 8) Fork-bomb protection (Python) ===');
-  const forkBomb = await executeCode(
-    'python',
-    'import os\ntry:\n    for _ in range(1000):\n        os.fork()\nexcept Exception as e:\n    print("blocked:", type(e).__name__)',
-    ''
-  );
-  console.log({ stdout: forkBomb.stdout, stderr: forkBomb.stderr.slice(0, 200), timedOut: forkBomb.timedOut });
+  console.log('\n=== 8) Process-count limiting note ===');
+  console.log('Intentionally NOT testing a real fork-bomb here: ulimit -u was removed from');
+  console.log('codeExecution.service.js (it is a per-*user*, not per-process-tree, limit - unsafe');
+  console.log('on a shared host, see the comment at the top of that file). Runaway CPU usage is');
+  console.log('still bounded by the wall-clock timeout, proven by test 7 above. Real process-count');
+  console.log('containment belongs to the OS/container layer in production (Docker --pids-limit,');
+  console.log('already used in backend/docker/*.Dockerfile) rather than to this in-process service.');
 
   console.log('\nAll tests completed.');
   process.exit(0);

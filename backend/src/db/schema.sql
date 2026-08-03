@@ -1,6 +1,7 @@
 -- CodeCloud - Cloud-Based Coding Education and Exam System
 -- Database Schema (PostgreSQL)
 
+DROP TABLE IF EXISTS integrity_events CASCADE;
 DROP TABLE IF EXISTS submissions CASCADE;
 DROP TABLE IF EXISTS exam_problems CASCADE;
 DROP TABLE IF EXISTS exams CASCADE;
@@ -84,8 +85,21 @@ CREATE TABLE submissions (
   submitted_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- Academic-integrity signals captured during an active exam (tab-switches, pastes, ...)
+CREATE TABLE integrity_events (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+  problem_id INTEGER REFERENCES problems(id) ON DELETE SET NULL,
+  event_type VARCHAR(30) NOT NULL, -- 'tab_hidden' | 'paste'
+  detail TEXT,
+  occurred_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX idx_submissions_user ON submissions(user_id);
 CREATE INDEX idx_submissions_problem ON submissions(problem_id);
 CREATE INDEX idx_submissions_exam ON submissions(exam_id);
 CREATE INDEX idx_test_cases_problem ON test_cases(problem_id);
 CREATE INDEX idx_exam_problems_exam ON exam_problems(exam_id);
+CREATE INDEX idx_integrity_events_exam ON integrity_events(exam_id);
+CREATE INDEX idx_integrity_events_user ON integrity_events(user_id);

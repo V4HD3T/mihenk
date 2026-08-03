@@ -67,19 +67,38 @@ function StudentExamView({ examId }) {
   );
 }
 
+function IntegrityBadge({ summary }) {
+  if (!summary) return <span className="text-inkmuted text-xs">—</span>;
+  const total = Number(summary.tab_hidden_count) + Number(summary.paste_count);
+  if (total === 0) return <span className="text-inkmuted text-xs">—</span>;
+  const style = total >= 5 ? 'bg-error-bg text-error' : 'bg-warning-bg text-warning';
+  return (
+    <span className={`text-xs font-mono px-2 py-1 rounded-full whitespace-nowrap ${style}`}>
+      ⚠ {summary.tab_hidden_count} tab · {summary.paste_count} paste
+    </span>
+  );
+}
+
 function TeacherExamResults({ examId }) {
   const [results, setResults] = useState([]);
+  const [integrity, setIntegrity] = useState([]);
 
   useEffect(() => {
     api.get(`/exams/${examId}/results`).then(({ data }) => setResults(data.results));
+    api.get(`/integrity/exam/${examId}`).then(({ data }) => setIntegrity(data.summary));
   }, [examId]);
 
   const students = [...new Map(results.map((r) => [r.user_id, r])).values()];
   const problemTitles = [...new Map(results.map((r) => [r.problem_id, r.problem_title])).entries()];
+  const integrityByUser = new Map(integrity.map((i) => [i.user_id, i]));
 
   return (
     <div>
-      <h1 className="font-display text-3xl font-semibold mb-6">Exam Results</h1>
+      <h1 className="font-display text-3xl font-semibold mb-1">Exam Results</h1>
+      <p className="text-xs text-inkmuted mb-6">
+        The integrity column logs tab switches and pasted code during the exam window — a signal
+        to review, not proof of misconduct on its own.
+      </p>
       {results.length === 0 ? (
         <p className="text-inkmuted">No submissions yet.</p>
       ) : (
@@ -93,6 +112,7 @@ function TeacherExamResults({ examId }) {
                     {title}
                   </th>
                 ))}
+                <th className="p-3 font-medium">Integrity</th>
               </tr>
             </thead>
             <tbody>
@@ -110,6 +130,10 @@ function TeacherExamResults({ examId }) {
                       </td>
                     );
                   })}
+                  <td className="p-3">
+                    <IntegrityBadge summary={integrityByUser.get(s.user_id)} />
+                  </td>
+
                 </tr>
               ))}
             </tbody>

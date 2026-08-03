@@ -12,6 +12,7 @@ import StudentExams from './pages/StudentExams';
 import ExamView from './pages/ExamView';
 import StudentsPage from './pages/StudentsPage';
 import SubmissionsView from './pages/SubmissionsView';
+import SimilarityReport from './pages/SimilarityReport';
 import Analytics from './pages/Analytics';
 
 function Home() {
@@ -84,6 +85,14 @@ export default function App() {
           element={
             <ProtectedRoute role="teacher">
               <SubmissionsView />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/similarity/:id"
+          element={
+            <ProtectedRoute role="teacher">
+              <SimilarityReport />
             </ProtectedRoute>
           }
         />

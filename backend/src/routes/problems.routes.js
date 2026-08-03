@@ -51,7 +51,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 // POST /api/problems - create a new problem (teacher only)
 router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
-    const { title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, testCases } = req.body;
+    const { title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, starter_code_javascript, starter_code_c, testCases } = req.body;
     if (!title || !description) {
       return res.status(400).json({ error: 'Title and description are required' });
     }
@@ -63,8 +63,8 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
     try {
       await client.query('BEGIN');
       const problemResult = await client.query(
-        `INSERT INTO problems (title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        `INSERT INTO problems (title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, starter_code_javascript, starter_code_c, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
         [
           title.trim(),
           description,
@@ -72,6 +72,8 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
           starter_code_python || '',
           starter_code_cpp || '',
           starter_code_java || '',
+          starter_code_javascript || '',
+          starter_code_c || '',
           req.user.id,
         ]
       );
@@ -102,12 +104,12 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
 // PUT /api/problems/:id - update a problem (teacher only)
 router.put('/:id', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
-    const { title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java } = req.body;
+    const { title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, starter_code_javascript, starter_code_c } = req.body;
     const result = await pool.query(
       `UPDATE problems SET title = $1, description = $2, difficulty = $3,
-       starter_code_python = $4, starter_code_cpp = $5, starter_code_java = $6
-       WHERE id = $7 RETURNING *`,
-      [title, description, difficulty, starter_code_python || '', starter_code_cpp || '', starter_code_java || '', req.params.id]
+       starter_code_python = $4, starter_code_cpp = $5, starter_code_java = $6, starter_code_javascript = $7, starter_code_c = $8
+       WHERE id = $9 RETURNING *`,
+      [title, description, difficulty, starter_code_python || '', starter_code_cpp || '', starter_code_java || '', starter_code_javascript || '', starter_code_c || '', req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Problem not found' });
     res.json({ problem: result.rows[0] });

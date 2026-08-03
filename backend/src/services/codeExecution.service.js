@@ -1,15 +1,22 @@
 /**
  * codeExecution.service.js
  *
- * Compiles and runs Python, C++, and Java code in an isolated temporary
- * directory, applying time/memory/process limits ("sandbox" runner).
+ * Compiles and runs Python, C++, Java, JavaScript, and C code in an
+ * isolated temporary directory, applying time and memory limits
+ * ("sandbox" runner).
  *
  * IMPORTANT (production note): this service runs submitted code in the
- * host's child_process layer; timeout + ulimit provide basic protection,
- * but for a real multi-tenant production environment, each run should be
- * isolated in its own network-disconnected Docker container (see
- * backend/docker/*.Dockerfile) or a micro-VM sandbox such as
- * gVisor/Firecracker for genuine isolation.
+ * host's child_process layer; timeout + memory limits provide basic
+ * protection, but for a real multi-tenant production environment, each run
+ * should be isolated in its own network-disconnected Docker container (see
+ * backend/docker/*.Dockerfile, which use --pids-limit for process-count
+ * containment) or a micro-VM sandbox such as gVisor/Firecracker for genuine
+ * isolation. Process-count limiting is intentionally NOT done here via
+ * `ulimit -u`: that limit is per-*user*, not per-process-tree, so on a
+ * shared host it can misfire depending on how many other processes/threads
+ * the user already owns - a fork bomb here is instead bounded purely by
+ * the wall-clock `timeout`, which is what backend/docker's --pids-limit is
+ * for in a properly namespaced (per-container) production deployment.
  */
 
 const { spawn } = require('child_process');
@@ -22,7 +29,6 @@ require('dotenv').config();
 const TIME_LIMIT_SEC = Number(process.env.EXEC_TIME_LIMIT_SEC) || 5;
 const MEMORY_LIMIT_KB = Number(process.env.EXEC_MEMORY_LIMIT_KB) || 524288; // 512 MB
 const MAX_OUTPUT_CHARS = Number(process.env.EXEC_MAX_OUTPUT_CHARS) || 100000;
-const MAX_PROCESSES = 40; // fork-bomb protection
 
 // Per-language config: filename, compile command (if any), run command.
 // NOTE: user code is NEVER embedded directly into a shell command; it is
@@ -32,12 +38,12 @@ const LANGUAGE_CONFIG = {
   python: {
     filename: 'main.py',
     compile: null,
-    run: () => `ulimit -v ${MEMORY_LIMIT_KB}; ulimit -u ${MAX_PROCESSES}; python3 main.py`,
+    run: () => `ulimit -v ${MEMORY_LIMIT_KB}; python3 main.py`,
   },
   cpp: {
     filename: 'main.cpp',
     compile: () => `g++ -O2 -std=c++17 -o main main.cpp`,
-    run: () => `ulimit -v ${MEMORY_LIMIT_KB}; ulimit -u ${MAX_PROCESSES}; ./main`,
+    run: () => `ulimit -v ${MEMORY_LIMIT_KB}; ./main`,
   },
   java: {
     filename: 'Main.java',
@@ -45,7 +51,19 @@ const LANGUAGE_CONFIG = {
     // Note: for Java, ulimit -v can conflict with the JVM's own virtual
     // memory reservations and trigger false "OOM" failures; we cap the
     // heap with -Xmx instead.
-    run: () => `ulimit -u ${MAX_PROCESSES}; java -Xmx256m -Xss8m Main`,
+    run: () => `java -Xmx256m -Xss8m Main`,
+  },
+  javascript: {
+    filename: 'main.js',
+    compile: null,
+    // Same rationale as Java: ulimit -v fights V8's own upfront virtual
+    // memory reservation. Cap the heap with Node's own flag instead.
+    run: () => `node --max-old-space-size=256 main.js`,
+  },
+  c: {
+    filename: 'main.c',
+    compile: () => `gcc -O2 -std=c17 -lm -o main main.c`,
+    run: () => `ulimit -v ${MEMORY_LIMIT_KB}; ./main`,
   },
 };
 
