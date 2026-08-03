@@ -4,6 +4,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { computeFingerprint, compareFingerprints, getMatchedSpans, computeClassReport } = require('../services/similarity.service');
 const { validate } = require('../middleware/validate');
 const schemas = require('../validation/schemas');
+const access = require('../services/courseAccess.service');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -15,6 +16,9 @@ const router = express.Router();
 // GET /api/integrity/problem/:id/similarity - class-wide pairwise similarity report (teacher)
 router.get('/problem/:id/similarity', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
+    if (!(await access.ownsProblem(req.user, req.params.id))) {
+      return res.status(404).json({ error: 'Problem not found' });
+    }
     // Latest submission per (student, language) for this problem - comparing a student's
     // own drafts against each other would be noise, and cross-language comparison is meaningless.
     const result = await pool.query(
@@ -52,11 +56,16 @@ router.get('/problem/:id/similarity', requireAuth, requireRole('teacher'), async
 // GET /api/integrity/compare/:idA/:idB - side-by-side comparison with highlighted matches (teacher)
 router.get('/compare/:idA/:idB', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
+    // Restricted to submissions inside this teacher's own courses, so a
+    // guessed submission id can't be used to read another course's code.
     const result = await pool.query(
       `SELECT s.id, s.code, s.language, s.problem_id, u.name AS user_name
-       FROM submissions s JOIN users u ON u.id = s.user_id
+       FROM submissions s
+       JOIN users u ON u.id = s.user_id
+       JOIN problems p ON p.id = s.problem_id
+       JOIN courses c ON c.id = p.course_id AND c.created_by = $3
        WHERE s.id IN ($1, $2)`,
-      [req.params.idA, req.params.idB]
+      [req.params.idA, req.params.idB, req.user.id]
     );
     if (result.rows.length !== 2) return res.status(404).json({ error: 'One or both submissions were not found' });
 
@@ -104,7 +113,11 @@ router.post('/events', requireAuth, validate({ body: schemas.integrityEvent }), 
   try {
     const { exam_id, problem_id, event_type, detail } = req.body;
 
-    const examResult = await pool.query('SELECT * FROM exams WHERE id = $1', [exam_id]);
+    const scope = access.courseScope(req.user, 'x.course_id', 2);
+    const examResult = await pool.query(
+      `SELECT x.* FROM exams x WHERE x.id = $1 AND ${scope.sql}`,
+      [exam_id, ...scope.params]
+    );
     if (examResult.rows.length === 0) return res.status(404).json({ error: 'Exam not found' });
     const exam = examResult.rows[0];
     const now = new Date();
@@ -128,6 +141,9 @@ router.post('/events', requireAuth, validate({ body: schemas.integrityEvent }), 
 // GET /api/integrity/exam/:id - per-student integrity summary for an exam (teacher)
 router.get('/exam/:id', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
+    if (!(await access.ownsExam(req.user, req.params.id))) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
     const result = await pool.query(
       `SELECT u.id AS user_id, u.name, u.email,
               COUNT(*) FILTER (WHERE ie.event_type = 'tab_hidden') AS tab_hidden_count,

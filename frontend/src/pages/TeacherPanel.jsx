@@ -2,7 +2,29 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
 
+// Every problem and exam belongs to a course as of v0.0.5, so both creation
+// forms need the teacher to pick one first.
+function CourseSelect({ value, onChange, courses }) {
+  return (
+    <select
+      required
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="px-3 py-2 rounded-card border border-line focus:border-primary outline-none"
+    >
+      <option value="">Select a course…</option>
+      {courses.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.title}
+          {c.term ? ` (${c.term})` : ''}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 const EMPTY_PROBLEM = {
+  course_id: '',
   title: '',
   description: '',
   difficulty: 'medium',
@@ -14,7 +36,7 @@ const EMPTY_PROBLEM = {
   testCases: [{ input: '', expected_output: '', is_sample: true }],
 };
 
-function ProblemForm({ onCreated }) {
+function ProblemForm({ onCreated, courses }) {
   const [form, setForm] = useState(EMPTY_PROBLEM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -35,7 +57,7 @@ function ProblemForm({ onCreated }) {
     setSaving(true);
     setError('');
     try {
-      await api.post('/problems', form);
+      await api.post('/problems', { ...form, course_id: Number(form.course_id) });
       setForm(EMPTY_PROBLEM);
       onCreated();
     } catch (err) {
@@ -48,7 +70,17 @@ function ProblemForm({ onCreated }) {
   return (
     <form onSubmit={handleSubmit} className="border border-line rounded-card p-6 bg-surface space-y-4">
       <h3 className="font-display text-lg font-medium">New Problem</h3>
+      {courses.length === 0 && (
+        <p className="text-sm text-inkmuted">
+          Create a course first — problems belong to a course.
+        </p>
+      )}
       <div className="grid sm:grid-cols-3 gap-3">
+        <CourseSelect
+          value={form.course_id}
+          onChange={(v) => setForm({ ...form, course_id: v })}
+          courses={courses}
+        />
         <input
           required
           placeholder="Title"
@@ -179,7 +211,8 @@ function ProblemForm({ onCreated }) {
   );
 }
 
-function ExamForm({ problems, onCreated }) {
+function ExamForm({ problems, courses, onCreated }) {
+  const [courseId, setCourseId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [startTime, setStartTime] = useState('');
@@ -192,12 +225,16 @@ function ExamForm({ problems, onCreated }) {
   const toggleProblem = (id) =>
     setSelectedProblems((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
 
+  // Only the chosen course's problems can go in the exam.
+  const courseProblems = problems.filter((p) => String(p.course_id) === String(courseId));
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError('');
     try {
       await api.post('/exams', {
+        course_id: Number(courseId),
         title,
         description,
         start_time: new Date(startTime).toISOString(),
@@ -209,6 +246,7 @@ function ExamForm({ problems, onCreated }) {
       setDescription('');
       setStartTime('');
       setEndTime('');
+      setCourseId('');
       setSelectedProblems([]);
       onCreated();
     } catch (err) {
@@ -221,13 +259,25 @@ function ExamForm({ problems, onCreated }) {
   return (
     <form onSubmit={handleSubmit} className="border border-line rounded-card p-6 bg-surface space-y-4">
       <h3 className="font-display text-lg font-medium">New Exam</h3>
-      <input
-        required
-        placeholder="Exam title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        className="w-full px-3 py-2 rounded-card border border-line focus:border-primary outline-none"
-      />
+      <div className="grid sm:grid-cols-3 gap-3">
+        <CourseSelect
+          value={courseId}
+          onChange={(v) => {
+            // Switching course clears the selection: an exam may only contain
+            // problems from its own course, which the server enforces too.
+            setCourseId(v);
+            setSelectedProblems([]);
+          }}
+          courses={courses}
+        />
+        <input
+          required
+          placeholder="Exam title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="sm:col-span-2 px-3 py-2 rounded-card border border-line focus:border-primary outline-none"
+        />
+      </div>
       <textarea
         placeholder="Description (optional)"
         value={description}
@@ -271,11 +321,13 @@ function ExamForm({ problems, onCreated }) {
 
       <div>
         <label className="text-xs text-inkmuted uppercase tracking-wide mb-2 block">Problems to include in the exam</label>
-        {problems.length === 0 ? (
-          <p className="text-sm text-inkmuted">First create problems from the Problems tab.</p>
+        {!courseId ? (
+          <p className="text-sm text-inkmuted">Pick a course first.</p>
+        ) : courseProblems.length === 0 ? (
+          <p className="text-sm text-inkmuted">This course has no problems yet — add one from the Problems tab.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {problems.map((p) => (
+            {courseProblems.map((p) => (
               <button
                 type="button"
                 key={p.id}
@@ -310,15 +362,18 @@ export default function TeacherPanel() {
   const [tab, setTab] = useState('problems');
   const [problems, setProblems] = useState([]);
   const [exams, setExams] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [showProblemForm, setShowProblemForm] = useState(false);
   const [showExamForm, setShowExamForm] = useState(false);
 
   const loadProblems = () => api.get('/problems').then(({ data }) => setProblems(data.problems));
   const loadExams = () => api.get('/exams').then(({ data }) => setExams(data.exams));
+  const loadCourses = () => api.get('/courses').then(({ data }) => setCourses(data.courses));
 
   useEffect(() => {
     loadProblems();
     loadExams();
+    loadCourses();
   }, []);
 
   const handleDeleteProblem = async (id) => {
@@ -362,6 +417,7 @@ export default function TeacherPanel() {
 
           {showProblemForm && (
             <ProblemForm
+              courses={courses}
               onCreated={() => {
                 setShowProblemForm(false);
                 loadProblems();
@@ -416,6 +472,7 @@ export default function TeacherPanel() {
           {showExamForm && (
             <ExamForm
               problems={problems}
+              courses={courses}
               onCreated={() => {
                 setShowExamForm(false);
                 loadExams();

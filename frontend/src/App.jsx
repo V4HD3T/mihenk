@@ -14,6 +14,8 @@ import StudentsPage from './pages/StudentsPage';
 import SubmissionsView from './pages/SubmissionsView';
 import SimilarityReport from './pages/SimilarityReport';
 import Analytics from './pages/Analytics';
+import Courses from './pages/Courses';
+import CourseRoster from './pages/CourseRoster';
 
 function Home() {
   const { user } = useAuth();
@@ -49,6 +51,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Analytics />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/courses"
+          element={
+            <ProtectedRoute>
+              <Courses />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/courses/:id/roster"
+          element={
+            <ProtectedRoute role="teacher">
+              <CourseRoster />
             </ProtectedRoute>
           }
         />

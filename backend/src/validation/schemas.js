@@ -53,6 +53,28 @@ const createSubmission = z.object({
   code,
 });
 
+const createCourse = z.object({
+  title: z.string().trim().min(1, 'Course title is required').max(200),
+  description: z.string().trim().max(5000).optional().default(''),
+  term: z.string().trim().max(50).optional().default(''),
+});
+
+const updateCourse = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().trim().max(5000).optional(),
+  term: z.string().trim().max(50).optional(),
+  archived: z.boolean().optional(),
+});
+
+const joinCourse = z.object({
+  joinCode: z.string().trim().min(1, 'A join code is required').max(16),
+});
+
+const courseUserParams = z.object({
+  id: z.coerce.number().int().positive(),
+  userId: z.coerce.number().int().positive(),
+});
+
 const integrityEvent = z.object({
   exam_id: z.coerce.number().int().positive(),
   problem_id: z.coerce.number().int().positive().nullish(),
@@ -68,4 +90,8 @@ module.exports = {
   executeCode,
   createSubmission,
   integrityEvent,
+  createCourse,
+  updateCourse,
+  joinCourse,
+  courseUserParams,
 };

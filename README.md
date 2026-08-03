@@ -1,7 +1,7 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.0.4**
+**Version 0.0.5**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, and C code directly in the browser, and teachers create problems/exams, grade
@@ -52,6 +52,9 @@ not safe for untrusted users. See `backend/README.md`.
 **Accounts:** signing up creates a student. Teacher accounts require the server's
 `TEACHER_INVITE_CODE` (see `backend/README.md`) — the client cannot choose its own role.
 
+**Courses:** teachers create a course and share its join code; students enter that code to enrol.
+Problems and exams belong to a course, and you only ever see the courses you are in.
+
 ## Feature coverage (mapped to the original project brief)
 
 | Requested feature | Implementation |
@@ -66,6 +69,7 @@ not safe for untrusted users. See `backend/README.md`.
 | Academic integrity (code similarity + exam monitoring) | `similarity.service.js` (Winnowing) + `/api/integrity/*` |
 | Cloud-native execution (scalable, matching the original "cloud computing" brief) | BullMQ/Redis queue + horizontally-scalable `npm run worker` processes |
 | Safe execution of untrusted code | Per-run Docker containers: no network, read-only rootfs, memory/CPU/pid limits, unprivileged uid |
+| Per-class separation of students and content | Courses + enrolment: students see only the courses they joined, teachers only the ones they own |
 
 ## Scope and limitations of this release
 
@@ -84,10 +88,15 @@ process limit. That containment is verified rather than assumed — `npm run san
 real hostile submissions (fork bomb, memory bomb, outbound network, writes outside the work
 directory) and CI fails the build if any of them escapes.
 
+v0.0.5 introduced courses. Problems and exams now belong to a course, and access follows
+enrolment: a student sees only their own courses, a teacher only the ones they created. Before
+this, every authenticated user could read every problem, exam and student on the server. The
+rules are covered by 21 integration tests against a real PostgreSQL, which CI runs on every push.
+
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
-instance (e.g. RDS/ElastiCache), centralized log aggregation, database-backed integration tests,
-and — if the threat model warrants a stronger boundary than a shared kernel — gVisor or a
-Firecracker micro-VM under the container layer.
+instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants
+a stronger boundary than a shared kernel — gVisor or a Firecracker micro-VM under the container
+layer.
 
 ## Changelog
 

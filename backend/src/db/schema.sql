@@ -15,6 +15,8 @@
 
 DROP TABLE IF EXISTS schema_migrations CASCADE;
 DROP TABLE IF EXISTS integrity_events CASCADE;
+DROP TABLE IF EXISTS enrollments CASCADE;
+DROP TABLE IF EXISTS courses CASCADE;
 DROP TABLE IF EXISTS submissions CASCADE;
 DROP TABLE IF EXISTS exam_problems CASCADE;
 DROP TABLE IF EXISTS exams CASCADE;
@@ -40,9 +42,31 @@ CREATE TABLE users (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- Courses (a class/section). Problems and exams belong to exactly one course,
+-- and students only ever see the courses they are enrolled in.
+CREATE TABLE courses (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  join_code VARCHAR(16) UNIQUE NOT NULL,
+  term VARCHAR(50) NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  archived BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Which students are in which course.
+CREATE TABLE enrollments (
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  enrolled_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (course_id, user_id)
+);
+
 -- Coding problems / exercises
 CREATE TABLE problems (
   id SERIAL PRIMARY KEY,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   title VARCHAR(200) NOT NULL,
   description TEXT NOT NULL,
   difficulty VARCHAR(20) NOT NULL DEFAULT 'medium',
@@ -68,6 +92,7 @@ CREATE TABLE test_cases (
 -- Exams
 CREATE TABLE exams (
   id SERIAL PRIMARY KEY,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   title VARCHAR(200) NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -119,6 +144,10 @@ CREATE INDEX idx_test_cases_problem ON test_cases(problem_id);
 CREATE INDEX idx_exam_problems_exam ON exam_problems(exam_id);
 CREATE INDEX idx_integrity_events_exam ON integrity_events(exam_id);
 CREATE INDEX idx_integrity_events_user ON integrity_events(user_id);
+CREATE INDEX idx_problems_course ON problems(course_id);
+CREATE INDEX idx_exams_course ON exams(course_id);
+CREATE INDEX idx_enrollments_user ON enrollments(user_id);
+CREATE INDEX idx_courses_created_by ON courses(created_by);
 
 -- Which numbered migrations have been applied to this database. `npm run migrate`
 -- reads this table, applies whatever is missing, and records it here.
@@ -131,4 +160,5 @@ CREATE TABLE schema_migrations (
 -- so mark them applied - otherwise `npm run migrate` would try to re-run them.
 INSERT INTO schema_migrations (filename) VALUES
   ('002_academic_integrity.sql'),
-  ('003_cloud_execution.sql');
+  ('003_cloud_execution.sql'),
+  ('004_courses.sql');

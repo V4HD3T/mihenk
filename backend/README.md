@@ -1,6 +1,6 @@
 # CodeCloud - Backend
 
-**Version 0.0.4**
+**Version 0.0.5**
 
 Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam System.
 
@@ -24,6 +24,8 @@ Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam
 - **Container-isolated execution (new in 0.0.4):** every compile and test case runs in its own
   throwaway Docker container with no network, a read-only root filesystem, memory/CPU caps and a
   process limit - see "Sandbox architecture" below
+- **Courses and enrolment (new in 0.0.5):** problems and exams belong to a course; students see
+  only the courses they joined, teachers only the courses they own - see "Courses" below
 
 ## Setup
 
@@ -104,7 +106,22 @@ npm run test:similarity  # similarity engine's own scenario checks
 
 `npm test` covers routing, validation, auth guards, security headers, CORS and rate limiting by
 mounting the Express app directly (`src/app.js` deliberately opens no ports or connections, which
-is what makes this possible). Database-backed integration tests are still to come.
+is what makes this possible).
+
+It also contains the course-isolation integration tests, which need a real PostgreSQL because the
+rules they check live entirely in SQL. They **skip** when no database is reachable, so `npm test`
+still works on a laptop without one:
+
+```bash
+docker run -d --name codecloud-pg -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=codecloud_test -p 55432:5432 postgres:16-alpine
+TEST_DB_PORT=55432 npm test
+```
+
+Set `REQUIRE_TEST_DB=1` to turn a missing database into a failure instead of a skip. CI sets it,
+because a green build with silently skipped isolation tests is precisely the false confidence
+they exist to prevent. The suite rebuilds the schema from `src/db/schema.sql` on every run, so it
+must point at a throwaway database - never your development one.
 
 ## Required system tools on the server
 
@@ -165,6 +182,35 @@ toolchains directly, so they need the table above regardless of `SANDBOX_MODE`.
 | GET    | /api/integrity/compare/:idA/:idB    | Side-by-side comparison with highlighted matches | Teacher |
 | POST   | /api/integrity/events               | Log a tab-switch/paste event during an exam | Authenticated |
 | GET    | /api/integrity/exam/:id             | Per-student integrity summary for an exam   | Teacher |
+| GET    | /api/courses                        | Courses you teach or are enrolled in        | Authenticated |
+| POST   | /api/courses                        | Create a course                             | Teacher |
+| GET    | /api/courses/:id                    | Course detail (join code: owner only)       | Enrolled / owner |
+| PUT    | /api/courses/:id                    | Update or archive a course                  | Owning teacher |
+| POST   | /api/courses/join                   | Enrol using a join code                     | Authenticated |
+| GET    | /api/courses/:id/roster             | Students enrolled in a course               | Owning teacher |
+| DELETE | /api/courses/:id/roster/:userId     | Remove a student from a course              | Owning teacher |
+| POST   | /api/courses/:id/regenerate-code    | Invalidate the current join code            | Owning teacher |
+
+## Courses
+
+Every problem and exam belongs to exactly one course, and that is what access is derived from:
+
+- **Students** see the problems, exams and submissions of courses they are enrolled in. Anything
+  else returns 404 - a course you are not in is indistinguishable from one that does not exist.
+- **Teachers** see and modify only courses they created, including that course's problems, test
+  cases, exams, results, similarity reports and roster.
+- A course's **join code** is the credential for entering it, so it is only ever returned to the
+  owning teacher. `POST /api/courses/:id/regenerate-code` invalidates a leaked one.
+- An exam may only contain problems from its own course, so a problem cannot be exposed to
+  another cohort by putting it in the wrong exam.
+
+`src/services/courseAccess.service.js` is the single place that answers "which courses may this
+user see?", so the rule cannot drift between the many queries that need it.
+
+Before v0.0.5 none of this existed: every authenticated user could read every problem, exam and
+student on the server, and any teacher could edit or delete any other teacher's content.
+Upgrading is lossless - `004_courses.sql` moves existing content into one "General" course and
+enrols every existing user in it, so an upgraded installation behaves exactly as it did before.
 
 ## Academic integrity engine
 

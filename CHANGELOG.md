@@ -2,6 +2,65 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.0.5] - Courses and Enrollment
+
+Until now the system had no notion of a class: every authenticated user could
+see every problem, exam and student on the server, and any teacher could edit
+or delete any other teacher's content. Content now belongs to a course, and you
+only see the courses you are in.
+
+### Added
+- **Courses and enrollments.** A course has a title, term and a join code;
+  students enrol by entering that code. Problems and exams belong to exactly
+  one course.
+  - `GET/POST /api/courses`, `GET/PUT /api/courses/:id`
+  - `POST /api/courses/join` - enrol with a join code
+  - `GET /api/courses/:id/roster`, `DELETE /api/courses/:id/roster/:userId`
+  - `POST /api/courses/:id/regenerate-code` - invalidate a leaked code
+- Join codes avoid characters that get misread when copied off a slide or read
+  aloud (no `0`/`O`, no `1`/`I`/`L`).
+- Course pages in the frontend: students join by code and see their courses;
+  teachers create courses, share the code and manage the roster.
+- **Database-backed integration tests** (21 cases) covering the isolation rules
+  against a real PostgreSQL - the previous release listed these as missing.
+  CI runs them against a Postgres service container, and `REQUIRE_TEST_DB=1`
+  makes CI fail rather than skip them if the database is unreachable.
+
+### Security
+Every endpoint that returns course-owned content is now scoped. Previously each
+of these leaked across the whole installation:
+- Students only see problems, exams and submissions for courses they are
+  enrolled in; anything else is a 404, indistinguishable from not existing.
+- Teachers only see and modify content in courses they own - including
+  problems, test cases, exams, exam results, submission lists, similarity
+  reports and exam-integrity summaries. Before this, any teacher account could
+  edit or delete any problem on the server.
+- `GET /api/users/students` returns only students enrolled in the caller's own
+  courses, not every account on the server.
+- Analytics count only the caller's own courses.
+- An exam can only contain problems from its own course, so a teacher can't
+  pull another course's problem into an exam and expose it.
+- A course's join code is only ever returned to the teacher who owns it.
+
+### Migration
+`004_courses.sql` is additive and lossless. Existing problems and exams are
+moved into a single "General" course, and every existing user is enrolled in
+it, so an upgraded installation behaves exactly as it did before until the
+teacher creates real courses. Re-running the migration is a no-op.
+
+### Verified
+Against a real PostgreSQL 16: fresh install from `schema.sql`, upgrade from a
+v0.0.1 database through every migration, and 21 isolation tests. The isolation
+tests were themselves checked by deliberately disabling the scoping rule, which
+failed 10 of them - confirming they detect the regression they exist to catch.
+
+### Known limitations (tracked for future versions)
+- No teaching-assistant role: a course has exactly one owning teacher
+- No CSV roster import; students enrol themselves with the join code
+- Course archiving hides a course from joining but does not archive its content
+- Containers share the host kernel (see v0.0.4)
+- No password reset or email verification
+
 ## [0.0.4] - Container-Isolated Execution
 
 Closes the last open item from the original v0.0.1 production notes: submitted

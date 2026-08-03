@@ -3,6 +3,7 @@ const pool = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const schemas = require('../validation/schemas');
+const access = require('../services/courseAccess.service');
 const { executeCode } = require('../services/codeExecution.service');
 const gradingQueue = require('../queue/gradingQueue');
 const logger = require('../logger');
@@ -33,14 +34,24 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
   try {
     const { problem_id, exam_id, language, code } = req.body;
 
-    const problemResult = await pool.query('SELECT id FROM problems WHERE id = $1', [problem_id]);
+    // Scoped: submitting to a problem in a course you're not enrolled in is a
+    // 404, the same as a problem that doesn't exist.
+    const scope = access.courseScope(req.user, 'p.course_id', 2);
+    const problemResult = await pool.query(
+      `SELECT p.id FROM problems p WHERE p.id = $1 AND ${scope.sql}`,
+      [problem_id, ...scope.params]
+    );
     if (problemResult.rows.length === 0) {
       return res.status(404).json({ error: 'Problem not found' });
     }
 
     // For exam submissions, validate the time window
     if (exam_id) {
-      const examResult = await pool.query('SELECT * FROM exams WHERE id = $1', [exam_id]);
+      const examScope = access.courseScope(req.user, 'x.course_id', 2);
+      const examResult = await pool.query(
+        `SELECT x.* FROM exams x WHERE x.id = $1 AND ${examScope.sql}`,
+        [exam_id, ...examScope.params]
+      );
       if (examResult.rows.length === 0) return res.status(404).json({ error: 'Exam not found' });
       const exam = examResult.rows[0];
       const now = new Date();
@@ -105,15 +116,19 @@ router.get(
   requireRole('teacher'),
   validate({ params: schemas.idParam }),
   async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT s.id, s.language, s.status, s.passed_count, s.total_count, s.submitted_at,
-              u.id AS user_id, u.name AS user_name, u.email AS user_email
-       FROM submissions s JOIN users u ON u.id = s.user_id
-       WHERE s.problem_id = $1
-       ORDER BY s.submitted_at DESC`,
-      [req.params.id]
-    );
+    try {
+      // A teacher may only read submissions for problems in their own courses.
+      if (!(await access.ownsProblem(req.user, req.params.id))) {
+        return res.status(404).json({ error: 'Problem not found' });
+      }
+      const result = await pool.query(
+        `SELECT s.id, s.language, s.status, s.passed_count, s.total_count, s.submitted_at,
+                u.id AS user_id, u.name AS user_name, u.email AS user_email
+         FROM submissions s JOIN users u ON u.id = s.user_id
+         WHERE s.problem_id = $1
+         ORDER BY s.submitted_at DESC`,
+        [req.params.id]
+      );
       res.json({ submissions: result.rows });
     } catch (err) {
       logger.error({ err }, 'Fetching problem submissions failed');

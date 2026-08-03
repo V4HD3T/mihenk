@@ -36,6 +36,7 @@ export default function Navbar() {
             {user.role === 'student' && (
               <>
                 <NavItem to="/">Problems</NavItem>
+                <NavItem to="/courses">Courses</NavItem>
                 <NavItem to="/my-exams">My Exams</NavItem>
                 <NavItem to="/analytics">My Progress</NavItem>
               </>
@@ -43,6 +44,7 @@ export default function Navbar() {
             {user.role === 'teacher' && (
               <>
                 <NavItem to="/">Dashboard</NavItem>
+                <NavItem to="/courses">Courses</NavItem>
                 <NavItem to="/students">Students</NavItem>
                 <NavItem to="/analytics">Analytics</NavItem>
               </>

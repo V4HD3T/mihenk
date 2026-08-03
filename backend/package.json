@@ -1,6 +1,6 @@
 {
   "name": "codecloud-backend",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Cloud-Based Multi-Platform Coding Education and Exam System - Backend API",
   "main": "src/server.js",
   "type": "commonjs",

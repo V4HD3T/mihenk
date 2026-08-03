@@ -10,24 +10,24 @@ router.get('/overview', requireAuth, requireRole('teacher'), async (req, res) =>
   try {
     const totals = await pool.query(`
       SELECT
-        (SELECT COUNT(*) FROM problems WHERE created_by = $1) AS problem_count,
-        (SELECT COUNT(*) FROM exams WHERE created_by = $1) AS exam_count,
-        (SELECT COUNT(DISTINCT user_id) FROM submissions s JOIN problems p ON p.id = s.problem_id WHERE p.created_by = $1) AS active_students,
-        (SELECT COUNT(*) FROM submissions s JOIN problems p ON p.id = s.problem_id WHERE p.created_by = $1) AS submission_count
+        (SELECT COUNT(*) FROM problems p JOIN courses c ON c.id = p.course_id WHERE c.created_by = $1) AS problem_count,
+        (SELECT COUNT(*) FROM exams x JOIN courses c ON c.id = x.course_id WHERE c.created_by = $1) AS exam_count,
+        (SELECT COUNT(DISTINCT s.user_id) FROM submissions s JOIN problems p ON p.id = s.problem_id JOIN courses c ON c.id = p.course_id WHERE c.created_by = $1) AS active_students,
+        (SELECT COUNT(*) FROM submissions s JOIN problems p ON p.id = s.problem_id JOIN courses c ON c.id = p.course_id WHERE c.created_by = $1) AS submission_count
     `, [req.user.id]);
 
     const dailySubmissions = await pool.query(`
       SELECT DATE(s.submitted_at) AS day, COUNT(*) AS count,
              COUNT(*) FILTER (WHERE s.passed_count = s.total_count) AS passed_count
-      FROM submissions s JOIN problems p ON p.id = s.problem_id
-      WHERE p.created_by = $1 AND s.submitted_at >= NOW() - INTERVAL '14 days'
+      FROM submissions s JOIN problems p ON p.id = s.problem_id JOIN courses c ON c.id = p.course_id
+      WHERE c.created_by = $1 AND s.submitted_at >= NOW() - INTERVAL '14 days'
       GROUP BY DATE(s.submitted_at) ORDER BY day ASC
     `, [req.user.id]);
 
     const languageDistribution = await pool.query(`
       SELECT s.language, COUNT(*) AS count
-      FROM submissions s JOIN problems p ON p.id = s.problem_id
-      WHERE p.created_by = $1
+      FROM submissions s JOIN problems p ON p.id = s.problem_id JOIN courses c ON c.id = p.course_id
+      WHERE c.created_by = $1
       GROUP BY s.language
     `, [req.user.id]);
 
@@ -35,8 +35,10 @@ router.get('/overview', requireAuth, requireRole('teacher'), async (req, res) =>
       SELECT p.id, p.title,
              COUNT(s.id) AS attempt_count,
              COUNT(s.id) FILTER (WHERE s.passed_count = s.total_count) AS solved_count
-      FROM problems p LEFT JOIN submissions s ON s.problem_id = p.id
-      WHERE p.created_by = $1
+      FROM problems p
+      JOIN courses c ON c.id = p.course_id
+      LEFT JOIN submissions s ON s.problem_id = p.id
+      WHERE c.created_by = $1
       GROUP BY p.id, p.title ORDER BY attempt_count DESC LIMIT 10
     `, [req.user.id]);
 

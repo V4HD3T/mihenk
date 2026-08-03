@@ -8,16 +8,20 @@ const router = express.Router();
 // GET /api/users/students - student list + summary stats for a teacher
 router.get('/students', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
+    // Only students enrolled in this teacher's own courses. Before v0.0.5 this
+    // returned every student account on the server to any teacher.
     const result = await pool.query(`
       SELECT u.id, u.name, u.email, u.created_at,
              COUNT(s.id) AS submission_count,
              COUNT(DISTINCT s.problem_id) FILTER (WHERE s.passed_count = s.total_count) AS solved_count
       FROM users u
+      JOIN enrollments e ON e.user_id = u.id
+      JOIN courses c ON c.id = e.course_id AND c.created_by = $1
       LEFT JOIN submissions s ON s.user_id = u.id
       WHERE u.role = 'student'
       GROUP BY u.id
       ORDER BY u.name ASC
-    `);
+    `, [req.user.id]);
     res.json({ students: result.rows });
   } catch (err) {
     logger.error({ err }, 'Student list failed');
@@ -29,16 +33,22 @@ router.get('/students', requireAuth, requireRole('teacher'), async (req, res) =>
 router.get('/students/:id', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
     const studentResult = await pool.query(
-      "SELECT id, name, email, created_at FROM users WHERE id = $1 AND role = 'student'",
-      [req.params.id]
+      `SELECT DISTINCT u.id, u.name, u.email, u.created_at FROM users u
+       JOIN enrollments e ON e.user_id = u.id
+       JOIN courses c ON c.id = e.course_id AND c.created_by = $2
+       WHERE u.id = $1 AND u.role = 'student'`,
+      [req.params.id, req.user.id]
     );
     if (studentResult.rows.length === 0) return res.status(404).json({ error: 'Student not found' });
 
+    // Only their work inside this teacher's courses.
     const submissionsResult = await pool.query(
       `SELECT s.id, s.language, s.passed_count, s.total_count, s.submitted_at, p.title AS problem_title
-       FROM submissions s JOIN problems p ON p.id = s.problem_id
+       FROM submissions s
+       JOIN problems p ON p.id = s.problem_id
+       JOIN courses c ON c.id = p.course_id AND c.created_by = $2
        WHERE s.user_id = $1 ORDER BY s.submitted_at DESC LIMIT 50`,
-      [req.params.id]
+      [req.params.id, req.user.id]
     );
 
     res.json({ student: studentResult.rows[0], submissions: submissionsResult.rows });

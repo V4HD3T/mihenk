@@ -1,22 +1,30 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const access = require('../services/courseAccess.service');
 const logger = require('../logger');
 
 const router = express.Router();
 
-// GET /api/problems - list of all problems (visible to everyone)
+// GET /api/problems - problems in the caller's courses.
+// Optional ?course_id=N narrows to one of them.
+// Before v0.0.5 this returned every problem in the system to every user.
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const scope = access.courseScope(req.user, 'p.course_id', 2);
+    const courseId = Number(req.query.course_id) || null;
     const result = await pool.query(
-      `SELECT p.id, p.title, p.difficulty, p.created_at, u.name AS created_by_name,
+      `SELECT p.id, p.title, p.difficulty, p.created_at, p.course_id,
+              c.title AS course_title, u.name AS created_by_name,
               COUNT(DISTINCT s.id) FILTER (WHERE s.user_id = $1 AND s.passed_count = s.total_count) > 0 AS solved_by_me
        FROM problems p
+       JOIN courses c ON c.id = p.course_id
        LEFT JOIN users u ON u.id = p.created_by
        LEFT JOIN submissions s ON s.problem_id = p.id
-       GROUP BY p.id, u.name
+       WHERE ${scope.sql} AND ($3::int IS NULL OR p.course_id = $3)
+       GROUP BY p.id, c.title, u.name
        ORDER BY p.created_at DESC`,
-      [req.user.id]
+      [req.user.id, ...scope.params, courseId]
     );
     res.json({ problems: result.rows });
   } catch (err) {
@@ -28,7 +36,13 @@ router.get('/', requireAuth, async (req, res) => {
 // GET /api/problems/:id - detail + sample test cases (hidden tests are not shown to students)
 router.get('/:id', requireAuth, async (req, res) => {
   try {
-    const problemResult = await pool.query('SELECT * FROM problems WHERE id = $1', [req.params.id]);
+    // Scoped in the same query as the lookup: a problem in a course the caller
+    // isn't in is indistinguishable from one that doesn't exist.
+    const scope = access.courseScope(req.user, 'p.course_id', 2);
+    const problemResult = await pool.query(
+      `SELECT p.* FROM problems p WHERE p.id = $1 AND ${scope.sql}`,
+      [req.params.id, ...scope.params]
+    );
     if (problemResult.rows.length === 0) {
       return res.status(404).json({ error: 'Problem not found' });
     }
@@ -52,21 +66,29 @@ router.get('/:id', requireAuth, async (req, res) => {
 // POST /api/problems - create a new problem (teacher only)
 router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
-    const { title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, starter_code_javascript, starter_code_c, testCases } = req.body;
+    const { course_id, title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, starter_code_javascript, starter_code_c, testCases } = req.body;
     if (!title || !description) {
       return res.status(400).json({ error: 'Title and description are required' });
     }
     if (!testCases || testCases.length === 0) {
       return res.status(400).json({ error: 'You must add at least one test case' });
     }
+    if (!course_id) {
+      return res.status(400).json({ error: 'A course is required' });
+    }
+    // A teacher can only add content to a course they own.
+    if (!(await access.ownsCourse(req.user, course_id))) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       const problemResult = await client.query(
-        `INSERT INTO problems (title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, starter_code_javascript, starter_code_c, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        `INSERT INTO problems (course_id, title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, starter_code_javascript, starter_code_c, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
         [
+          course_id,
           title.trim(),
           description,
           difficulty || 'medium',
@@ -105,6 +127,9 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
 // PUT /api/problems/:id - update a problem (teacher only)
 router.put('/:id', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
+    if (!(await access.ownsProblem(req.user, req.params.id))) {
+      return res.status(404).json({ error: 'Problem not found' });
+    }
     const { title, description, difficulty, starter_code_python, starter_code_cpp, starter_code_java, starter_code_javascript, starter_code_c } = req.body;
     const result = await pool.query(
       `UPDATE problems SET title = $1, description = $2, difficulty = $3,
@@ -123,6 +148,9 @@ router.put('/:id', requireAuth, requireRole('teacher'), async (req, res) => {
 // DELETE /api/problems/:id (teacher only)
 router.delete('/:id', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
+    if (!(await access.ownsProblem(req.user, req.params.id))) {
+      return res.status(404).json({ error: 'Problem not found' });
+    }
     await pool.query('DELETE FROM problems WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
@@ -134,6 +162,9 @@ router.delete('/:id', requireAuth, requireRole('teacher'), async (req, res) => {
 // POST /api/problems/:id/testcases - add a test case to a problem (teacher)
 router.post('/:id/testcases', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
+    if (!(await access.ownsProblem(req.user, req.params.id))) {
+      return res.status(404).json({ error: 'Problem not found' });
+    }
     const { input, expected_output, is_sample } = req.body;
     if (!expected_output) return res.status(400).json({ error: 'Expected output is required' });
     const result = await pool.query(
@@ -152,6 +183,9 @@ router.post('/:id/testcases', requireAuth, requireRole('teacher'), async (req, r
 // DELETE /api/problems/:id/testcases/:tcId (teacher)
 router.delete('/:id/testcases/:tcId', requireAuth, requireRole('teacher'), async (req, res) => {
   try {
+    if (!(await access.ownsProblem(req.user, req.params.id))) {
+      return res.status(404).json({ error: 'Problem not found' });
+    }
     await pool.query('DELETE FROM test_cases WHERE id = $1 AND problem_id = $2', [req.params.tcId, req.params.id]);
     res.json({ success: true });
   } catch (err) {
