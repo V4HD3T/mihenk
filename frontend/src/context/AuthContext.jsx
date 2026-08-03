@@ -32,11 +32,18 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const register = useCallback(async (name, email, password, role) => {
+  // The server decides the role: an account is a student unless the request
+  // carries a valid teacher invite code, so there is no `role` field to send.
+  const register = useCallback(async (name, email, password, inviteCode) => {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.post('/auth/register', { name, email, password, role });
+      const { data } = await api.post('/auth/register', {
+        name,
+        email,
+        password,
+        ...(inviteCode ? { inviteCode } : {}),
+      });
       persist(data.user, data.token);
       return true;
     } catch (err) {

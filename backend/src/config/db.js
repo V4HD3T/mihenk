@@ -1,16 +1,20 @@
 const { Pool } = require('pg');
 require('dotenv').config();
+const { config } = require('./env');
+const logger = require('../logger');
+
+const env = config();
 
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: Number(process.env.DB_PORT) || 5432,
-  database: process.env.DB_NAME || 'codecloud',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
+  host: env.DB_HOST,
+  port: env.DB_PORT,
+  database: env.DB_NAME,
+  user: env.DB_USER,
+  password: env.DB_PASSWORD,
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected database pool error:', err);
+  logger.error({ err }, 'Unexpected database pool error');
 });
 
 module.exports = pool;

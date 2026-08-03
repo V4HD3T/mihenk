@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const logger = require('../logger');
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
       client.release();
     }
   } catch (err) {
-    console.error('Exam creation error:', err);
+    logger.error({ err }, 'Exam creation failed');
     res.status(500).json({ error: 'Failed to create exam' });
   }
 });
@@ -71,7 +72,7 @@ router.get('/', requireAuth, async (req, res) => {
     const result = await pool.query(query, params);
     res.json({ exams: result.rows });
   } catch (err) {
-    console.error('Exam list error:', err);
+    logger.error({ err }, 'Exam list failed');
     res.status(500).json({ error: 'Failed to fetch exams' });
   }
 });
@@ -101,7 +102,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     res.json({ exam: examResult.rows[0], problems: problemsResult.rows, myProgress });
   } catch (err) {
-    console.error('Exam detail error:', err);
+    logger.error({ err }, 'Exam detail failed');
     res.status(500).json({ error: 'Failed to fetch exam detail' });
   }
 });
@@ -123,7 +124,7 @@ router.get('/:id/results', requireAuth, requireRole('teacher'), async (req, res)
     );
     res.json({ results: result.rows });
   } catch (err) {
-    console.error('Exam results error:', err);
+    logger.error({ err }, 'Exam results failed');
     res.status(500).json({ error: 'Failed to fetch exam results' });
   }
 });

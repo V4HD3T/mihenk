@@ -1,60 +1,62 @@
+/**
+ * Process entry point: turns the Express app into a live HTTP + WebSocket
+ * server and bridges worker job completions back to connected browsers.
+ *
+ * The app itself lives in app.js (no I/O), which is what the test suite mounts.
+ */
+
 require('dotenv').config();
 const http = require('http');
-const express = require('express');
-const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { WebSocketServer } = require('ws');
 const { QueueEvents } = require('bullmq');
 
-const authRoutes = require('./routes/auth.routes');
-const problemsRoutes = require('./routes/problems.routes');
-const submissionsRoutes = require('./routes/submissions.routes');
-const examsRoutes = require('./routes/exams.routes');
-const analyticsRoutes = require('./routes/analytics.routes');
-const usersRoutes = require('./routes/users.routes');
-const integrityRoutes = require('./routes/integrity.routes');
+const { createApp } = require('./app');
 const createConnection = require('./queue/redis');
 const wsHub = require('./ws/hub');
+const logger = require('./logger');
+const { config } = require('./config/env');
 
-const app = express();
-
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || '*' }));
-app.use(express.json({ limit: '1mb' }));
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'codecloud-backend', time: new Date().toISOString() });
-});
-
-app.use('/api/auth', authRoutes);
-app.use('/api/problems', problemsRoutes);
-app.use('/api/submissions', submissionsRoutes);
-app.use('/api/exams', examsRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/integrity', integrityRoutes);
-
-app.use((req, res) => {
-  res.status(404).json({ error: 'Endpoint not found' });
-});
-
-// eslint-disable-next-line no-unused-vars
-app.use((err, req, res, next) => {
-  console.error('Unexpected error:', err);
-  res.status(500).json({ error: 'Server error' });
-});
-
-// The API and the WebSocket server share one HTTP server/port.
+const env = config();
+const app = createApp();
 const server = http.createServer(app);
 
+// The API and the WebSocket server share one HTTP server/port.
 const wss = new WebSocketServer({ server, path: '/ws' });
+
+/**
+ * Authenticates a WebSocket handshake.
+ *
+ * The browser WebSocket API can't set an Authorization header, so the token
+ * rides in the Sec-WebSocket-Protocol header instead of the query string it
+ * used before v0.0.3 - URLs end up in proxy logs, access logs and Referer
+ * headers, which is a poor place for a 7-day credential.
+ */
+function tokenFromHandshake(req) {
+  const offered = (req.headers['sec-websocket-protocol'] || '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const idx = offered.indexOf('bearer');
+  return idx !== -1 ? offered[idx + 1] : null;
+}
+
 wss.on('connection', (socket, req) => {
   try {
-    const { searchParams } = new URL(req.url, 'http://localhost');
-    const token = searchParams.get('token');
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const token = tokenFromHandshake(req);
+    if (!token) throw new Error('missing token');
+    const payload = jwt.verify(token, env.JWT_SECRET);
     wsHub.register(payload.id, socket);
   } catch {
-    socket.close(); // missing/invalid token
+    socket.close(1008, 'unauthorized');
+  }
+});
+
+// A client that negotiates the "bearer" subprotocol expects the server to
+// confirm it, otherwise the browser aborts the connection.
+wss.on('headers', (headers) => {
+  if (!headers.some((h) => h.toLowerCase().startsWith('sec-websocket-protocol'))) {
+    headers.push('Sec-WebSocket-Protocol: bearer');
   }
 });
 
@@ -70,11 +72,41 @@ queueEvents.on('completed', ({ returnvalue }) => {
       wsHub.sendToUser(data.userId, { type: 'submission_result', ...data });
     }
   } catch (err) {
-    console.error('WebSocket notify error:', err);
+    logger.error({ err }, 'WebSocket notify failed');
   }
 });
 
-const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => {
-  console.log(`CodeCloud backend running on port ${PORT} (HTTP + WebSocket at /ws)`);
+server.listen(env.PORT, () => {
+  logger.info(`CodeCloud backend running on port ${env.PORT} (HTTP + WebSocket at /ws)`);
 });
+
+/**
+ * Stop accepting new work, then let in-flight requests finish before exiting.
+ * Without this a deploy/restart cuts active requests and open sockets dead.
+ */
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`${signal} received, shutting down gracefully`);
+
+  const timer = setTimeout(() => {
+    logger.error('Graceful shutdown timed out, forcing exit');
+    process.exit(1);
+  }, 10000);
+  timer.unref();
+
+  try {
+    for (const client of wss.clients) client.close(1001, 'server shutting down');
+    await new Promise((resolve) => server.close(resolve));
+    await queueEvents.close();
+    logger.info('Shutdown complete');
+    process.exit(0);
+  } catch (err) {
+    logger.error({ err }, 'Error during shutdown');
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

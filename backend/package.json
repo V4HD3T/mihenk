@@ -1,6 +1,6 @@
 {
   "name": "codecloud-backend",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Cloud-Based Multi-Platform Coding Education and Exam System - Backend API",
   "main": "src/server.js",
   "type": "commonjs",
@@ -9,8 +9,15 @@
     "dev": "node --watch src/server.js",
     "worker": "node src/worker.js",
     "worker:dev": "node --watch src/worker.js",
-    "test": "node test-exec.js",
-    "test:similarity": "node test-similarity.js"
+    "migrate": "node scripts/migrate.js",
+    "migrate:status": "node scripts/migrate.js --status",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:exec": "node test-exec.js",
+    "test:similarity": "node test-similarity.js",
+    "lint": "eslint .",
+    "format": "prettier --write ..",
+    "format:check": "prettier --check .."
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -18,10 +25,23 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.6.1",
+    "helmet": "^8.3.0",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.5",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
     "uuid": "^9.0.1",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.0",
+    "globals": "^17.9.0",
+    "prettier": "^3.9.6",
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.10"
   }
 }

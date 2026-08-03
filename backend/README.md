@@ -1,6 +1,6 @@
 # CodeCloud - Backend
 
-**Version 0.0.2**
+**Version 0.0.3**
 
 Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam System.
 
@@ -19,6 +19,8 @@ Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam
 - Student list / progress tracking for teachers
 - Academic integrity: Winnowing-based code-similarity screening across a class's submissions,
   plus tab-switch/paste monitoring during active exams
+- Hardened request handling (new in 0.0.3): schema-validated input, per-IP rate limiting,
+  security headers, an origin allowlist, and structured request logging
 
 ## Setup
 
@@ -29,20 +31,29 @@ cp .env.example .env   # edit with your own values
 
 ### Database
 
-PostgreSQL must be installed and running.
+PostgreSQL **12 or newer** must be installed and running.
 
 **New installation:**
 ```bash
 createdb codecloud
 psql -U postgres -d codecloud -f src/db/schema.sql
 ```
+`schema.sql` is the complete current schema - it already contains everything in
+`migrations/`, and records those migrations as applied.
 
-**Upgrading an existing v0.0.1 database** (keeps your data — do not re-run `schema.sql`, it drops
-and recreates every table). Both migrations ship in v0.0.2; run them in order:
+**Upgrading an existing database** (keeps your data — do not re-run `schema.sql`, it drops and
+recreates every table):
 ```bash
-psql -U postgres -d codecloud -f migrations/002_academic_integrity.sql
-psql -U postgres -d codecloud -f migrations/003_cloud_execution.sql
+npm run migrate          # applies whatever this database is missing, in order
+npm run migrate:status   # shows applied vs pending without changing anything
 ```
+
+### Accounts and roles
+
+Registration creates a **student** account. To create a teacher, set
+`TEACHER_INVITE_CODE` in `.env` and supply that code on the signup form; the
+server assigns the role, never the client. Leaving `TEACHER_INVITE_CODE` unset
+disables teacher self-registration entirely.
 
 ### Running
 
@@ -59,6 +70,23 @@ npm run worker           # grading worker, in a separate terminal
 Health check: `GET /api/health`. Run more than one `npm run worker` (same machine or different
 ones) to grade more submissions concurrently — they all pull from the same Redis queue, so no
 extra coordination is needed.
+
+Both processes shut down gracefully on `SIGINT`/`SIGTERM`: the API drains in-flight requests and
+the worker finishes the submissions it is currently grading, so a restart never strands a
+submission in the `running` state.
+
+### Tests and linting
+
+```bash
+npm test               # automated suite - no PostgreSQL or Redis required
+npm run lint
+npm run test:exec        # live execution engine, needs python3/g++/gcc/javac/node installed
+npm run test:similarity  # similarity engine's own scenario checks
+```
+
+`npm test` covers routing, validation, auth guards, security headers, CORS and rate limiting by
+mounting the Express app directly (`src/app.js` deliberately opens no ports or connections, which
+is what makes this possible). Database-backed integration tests are still to come.
 
 ## Required system tools on the server
 
@@ -78,9 +106,10 @@ Ubuntu/Debian: `apt install python3 g++ gcc openjdk-21-jdk-headless redis-server
 
 | Method | Path                                | Description                                | Access     |
 |--------|---------------------------------------|----------------------------------------------|------------|
-| POST   | /api/auth/register                  | Register                                    | -          |
+| POST   | /api/auth/register                  | Register (student, or teacher with an invite code) | -   |
 | POST   | /api/auth/login                     | Log in                                      | -          |
 | GET    | /api/auth/me                        | Current session info                        | Authenticated |
+| GET    | /api/auth/registration-options      | Whether this server accepts a teacher invite code | -    |
 | GET    | /api/problems                       | List problems                               | Authenticated |
 | GET    | /api/problems/:id                   | Problem detail                              | Authenticated |
 | POST   | /api/problems                       | Create a problem                            | Teacher |
@@ -166,10 +195,19 @@ namespaced per-container - see `--pids-limit` in `backend/docker/*.Dockerfile`.
 **Still recommended before production** (real, untrusted multi-tenant traffic): isolate every
 run in its own network-disconnected, resource-limited container, similar to the examples in
 `backend/docker/*.Dockerfile` (or a gVisor/Firecracker micro-VM) — this is the one piece from the
-v0.0.1 production notes that v0.0.2 doesn't yet close, since it requires a container runtime this
+v0.0.1 production notes that v0.0.3 doesn't yet close, since it requires a container runtime this
 project doesn't assume you have. The other half of that original recommendation, queueing and
-horizontally-scaled workers, is what v0.0.2 adds.
+horizontally-scaled workers, was added in v0.0.2. Wiring the containers in is the next version's
+main job.
 
 ## Environment Variables
 
-See `.env.example`. In particular, always change `JWT_SECRET` in production.
+See `.env.example`. Every variable is validated at startup, so a typo or a missing required value
+fails immediately with a readable message instead of surfacing later as a confusing runtime error.
+
+Two of them matter for safety:
+
+- `JWT_SECRET` — the server **refuses to start** in production while this is still the placeholder
+  from `.env.example`, since anyone who has read the repo could otherwise forge tokens.
+- `TEACHER_INVITE_CODE` — controls who can create a teacher account. Unset means teacher
+  self-registration is off.

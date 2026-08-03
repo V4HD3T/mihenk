@@ -1,7 +1,7 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.0.2**
+**Version 0.0.3**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, and C code directly in the browser, and teachers create problems/exams, grade
@@ -18,12 +18,11 @@ on top.
 ## Quick Start
 
 ```bash
-# 1) Database (fresh install)
+# 1) Database (fresh install) - PostgreSQL 12+
 createdb codecloud
 psql -U postgres -d codecloud -f backend/src/db/schema.sql
-# Upgrading an existing database instead? Run whichever migrations you're missing, in order:
-#   psql -U postgres -d codecloud -f backend/migrations/002_academic_integrity.sql
-#   psql -U postgres -d codecloud -f backend/migrations/003_cloud_execution.sql
+# Upgrading an existing database instead? Don't re-run schema.sql - it drops every table:
+#   cd backend && npm run migrate
 
 # 2) Redis (grading queue)
 redis-server &                # or: service redis-server start
@@ -32,8 +31,7 @@ redis-server &                # or: service redis-server start
 cd backend
 npm install
 cp .env.example .env
-npm run test               # runs the execution engine live against all 5 languages
-npm run test:similarity    # runs the code-similarity engine's test suite
+npm test                    # automated suite (no PostgreSQL/Redis needed)
 npm run dev                 # API + WebSocket -> http://localhost:4000
 npm run worker              # grading worker, in a separate terminal (run more to scale up)
 
@@ -45,7 +43,12 @@ npm run dev     # http://localhost:5173
 ```
 
 The server machine must have `python3`, `g++`/`gcc` (C++17/C17), a JDK (`javac`), `node`, and
-`redis-server` installed — see `backend/README.md` for details.
+`redis-server` installed — see `backend/README.md` for details. To exercise the execution and
+similarity engines against those toolchains directly, run `npm run test:exec` and
+`npm run test:similarity`.
+
+**Accounts:** signing up creates a student. Teacher accounts require the server's
+`TEACHER_INVITE_CODE` (see `backend/README.md`) — the client cannot choose its own role.
 
 ## Feature coverage (mapped to the original project brief)
 
@@ -67,15 +70,18 @@ This is an **end-to-end working MVP/prototype, tested against a real PostgreSQL 
 not a scaffold or mockup. The following flows all work as shipped: register → log in → create
 a problem → write/run code → submit/auto-grade → create an exam → analytics.
 
-Before moving this to a real, publicly-accessible "cloud" environment with multiple untrusted
-users, one thing is still recommended (see "Cloud execution architecture" and "Sandbox
-architecture and security note" in `backend/README.md` for details): move code execution into
-separate, network-disconnected Docker containers, similar to the examples in `backend/docker/`
-— that's the one piece of the original architecture notes this project doesn't run live, since
-it needs a container runtime. Everything else from those notes (the grading queue and
-horizontally-scaled workers) is implemented and tested as of v0.0.2. Also still worth adding:
-rate limiting, HTTPS, a managed PostgreSQL/Redis instance (e.g. RDS/ElastiCache), and
-centralized logging.
+v0.0.3 added the operational groundwork for running this somewhere real: validated input,
+per-IP rate limiting, security headers, an explicit CORS allowlist, structured logging,
+graceful shutdown, an automated test suite and CI — plus fixes for two bugs that made a fresh
+v0.0.2 install unable to accept a submission at all (see `CHANGELOG.md`).
+
+Before moving this to a publicly-accessible "cloud" environment with untrusted users, the main
+remaining piece is sandboxing (see "Cloud execution architecture" and "Sandbox architecture and
+security note" in `backend/README.md`): move code execution into separate,
+network-disconnected Docker containers, similar to the examples in `backend/docker/`. That's
+the one part of the original architecture notes this project doesn't run live, since it needs a
+container runtime. Also still worth adding: HTTPS, a managed PostgreSQL/Redis instance (e.g.
+RDS/ElastiCache), centralized log aggregation, and database-backed integration tests.
 
 ## Changelog
 

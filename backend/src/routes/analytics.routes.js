@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const logger = require('../logger');
 
 const router = express.Router();
 
@@ -46,7 +47,7 @@ router.get('/overview', requireAuth, requireRole('teacher'), async (req, res) =>
       problemSuccessRates: problemSuccessRates.rows,
     });
   } catch (err) {
-    console.error('Analytics error:', err);
+    logger.error({ err }, 'Analytics failed');
     res.status(500).json({ error: 'Failed to fetch analytics data' });
   }
 });
@@ -81,7 +82,7 @@ router.get('/me', requireAuth, async (req, res) => {
       totalProblems: Number(totalProblems.rows[0].count),
     });
   } catch (err) {
-    console.error('Personal analytics error:', err);
+    logger.error({ err }, 'Personal analytics failed');
     res.status(500).json({ error: 'Failed to fetch analytics data' });
   }
 });

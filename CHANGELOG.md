@@ -2,6 +2,79 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.0.3] - Correctness & Security Hardening
+
+No new end-user features. This release fixes two bugs that made a fresh install
+unusable or unsafe, and adds the operational groundwork (validation, rate
+limiting, logging, tests, CI) that the earlier versions skipped.
+
+### Fixed
+- **A fresh install could not accept a single submission.** `src/db/schema.sql`
+  had drifted from `migrations/`: it never got migration 003's changes, so a
+  database created the way the README documented had no `queued`/`running`
+  submission states, no `javascript`/`c` languages, no `results_json` and no
+  starter-code columns for the new languages - while the code inserts
+  `status = 'queued'` on every submit. Only databases upgraded from v0.0.1 via
+  the migration files worked. `schema.sql` is now the complete current-state
+  schema, and a test asserts it stays in sync with `migrations/`.
+- **`GET /api/submissions/my` returned 500 for every caller.** v0.0.2 added the
+  polling route `GET /:id` above it, so Express matched `/my` as `id="my"` and
+  handed Postgres a non-integer id. The literal routes are now registered
+  before the parameterised one, with a comment explaining why the order matters.
+
+### Security
+- **Anyone could register as a teacher.** `POST /api/auth/register` took `role`
+  straight from the request body, so a single crafted request granted access to
+  every submission, similarity report and student record in the system. Role is
+  now decided server-side: an account is a student unless the request carries
+  the configured `TEACHER_INVITE_CODE`, and teacher signup is disabled outright
+  when no code is set.
+- CORS no longer falls back to `*`. `FRONTEND_ORIGIN` is an explicit
+  comma-separated allowlist; unlisted origins are refused.
+- Rate limiting (`express-rate-limit`) with a tight budget on login/registration
+  and a separate one on `/api/submissions/execute`, which spawns a real
+  compiler per call.
+- Standard security headers via `helmet`.
+- The WebSocket JWT moved from the URL query string to the
+  `Sec-WebSocket-Protocol` header - URLs end up in proxy logs, access logs and
+  `Referer` headers, which is a poor place for a 7-day credential.
+- The server refuses to boot in production while `JWT_SECRET` is still the
+  placeholder from `.env.example`.
+- Error responses no longer echo internal error messages, and logs redact
+  authorization headers, passwords and tokens.
+
+### Added
+- **Migration runner**: `npm run migrate` applies pending migrations and records
+  them in a new `schema_migrations` table; `npm run migrate:status` shows what
+  is applied vs pending. Safe to re-run, and a no-op on a fresh install.
+- **Request validation** with zod on every endpoint that takes input, so
+  malformed requests are rejected with a per-field 400 before reaching Postgres.
+- **Structured logging** with pino, including a per-request id.
+- **Graceful shutdown** for both processes: the API drains in-flight requests
+  and closes sockets, and the worker finishes the submissions it is grading
+  instead of stranding them in `running`.
+- **Validated configuration**: every environment variable is parsed and checked
+  at startup, so a typo fails immediately with a readable message.
+- **Automated tests** (`npm test`, 31 cases) covering routing, validation,
+  security headers, CORS, rate limiting and both fixed bugs as regressions.
+  They need no PostgreSQL or Redis, so they run anywhere.
+- **GitHub Actions CI** running backend lint + tests and a frontend build.
+- ESLint and Prettier configuration.
+
+### Changed
+- `npm test` now runs the automated suite. The live execution-engine harness,
+  which needs Python/g++/JDK/Node installed, moved to `npm run test:exec`.
+- The signup form no longer offers a role toggle; it shows a teacher
+  invite-code field only when the server reports one is accepted
+  (`GET /api/auth/registration-options`).
+
+### Known limitations (tracked for future versions)
+- Docker-based per-run isolation is still reference-only (`backend/docker/`) -
+  scheduled next
+- No course/enrollment model: problems and exams are still global to every user
+- Tests cover the HTTP layer; database-backed integration tests still to come
+- No password reset or email verification
+
 ## [0.0.2] - Academic Integrity & Cloud Execution
 
 This release bundles two feature tracks on top of the initial version: academic-integrity

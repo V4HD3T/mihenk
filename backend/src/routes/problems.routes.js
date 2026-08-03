@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const logger = require('../logger');
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.get('/', requireAuth, async (req, res) => {
     );
     res.json({ problems: result.rows });
   } catch (err) {
-    console.error('Problem list error:', err);
+    logger.error({ err }, 'Problem list failed');
     res.status(500).json({ error: 'Failed to fetch problems' });
   }
 });
@@ -43,7 +44,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     res.json({ problem, testCases: testCasesResult.rows });
   } catch (err) {
-    console.error('Problem detail error:', err);
+    logger.error({ err }, 'Problem detail failed');
     res.status(500).json({ error: 'Failed to fetch problem detail' });
   }
 });
@@ -96,7 +97,7 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
       client.release();
     }
   } catch (err) {
-    console.error('Problem creation error:', err);
+    logger.error({ err }, 'Problem creation failed');
     res.status(500).json({ error: 'Failed to create problem' });
   }
 });
@@ -114,7 +115,7 @@ router.put('/:id', requireAuth, requireRole('teacher'), async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Problem not found' });
     res.json({ problem: result.rows[0] });
   } catch (err) {
-    console.error('Problem update error:', err);
+    logger.error({ err }, 'Problem update failed');
     res.status(500).json({ error: 'Failed to update problem' });
   }
 });
@@ -125,7 +126,7 @@ router.delete('/:id', requireAuth, requireRole('teacher'), async (req, res) => {
     await pool.query('DELETE FROM problems WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
-    console.error('Problem deletion error:', err);
+    logger.error({ err }, 'Problem deletion failed');
     res.status(500).json({ error: 'Failed to delete problem (it may be in use by an active exam)' });
   }
 });
@@ -143,7 +144,7 @@ router.post('/:id/testcases', requireAuth, requireRole('teacher'), async (req, r
     );
     res.status(201).json({ testCase: result.rows[0] });
   } catch (err) {
-    console.error('Test case creation error:', err);
+    logger.error({ err }, 'Test case creation failed');
     res.status(500).json({ error: 'Failed to add test case' });
   }
 });
@@ -154,7 +155,7 @@ router.delete('/:id/testcases/:tcId', requireAuth, requireRole('teacher'), async
     await pool.query('DELETE FROM test_cases WHERE id = $1 AND problem_id = $2', [req.params.tcId, req.params.id]);
     res.json({ success: true });
   } catch (err) {
-    console.error('Test case deletion error:', err);
+    logger.error({ err }, 'Test case deletion failed');
     res.status(500).json({ error: 'Failed to delete test case' });
   }
 });

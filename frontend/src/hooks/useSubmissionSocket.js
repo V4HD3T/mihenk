@@ -22,7 +22,12 @@ export function useSubmissionSocket(onResult) {
 
     let socket;
     try {
-      socket = new WebSocket(`${wsUrl()}?token=${token}`);
+      // The token travels as a WebSocket subprotocol rather than a query
+      // parameter: URLs leak into proxy/access logs and Referer headers, which
+      // is a bad place for a credential. The browser API gives us no way to set
+      // a real Authorization header on a WebSocket, so this is the standard
+      // workaround - the server reads it from Sec-WebSocket-Protocol.
+      socket = new WebSocket(wsUrl(), ['bearer', token]);
     } catch {
       return; // WebSocket unsupported/blocked - polling fallback still covers this
     }

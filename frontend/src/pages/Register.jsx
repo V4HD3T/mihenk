@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/axios';
 
 export default function Register() {
   const { register, loading, error } = useAuth();
@@ -8,11 +9,20 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('student');
+  const [inviteCode, setInviteCode] = useState('');
+  const [teacherEnabled, setTeacherEnabled] = useState(false);
+
+  // Only offer the invite-code field if this server actually accepts one.
+  useEffect(() => {
+    api
+      .get('/auth/registration-options')
+      .then(({ data }) => setTeacherEnabled(Boolean(data.teacherRegistrationEnabled)))
+      .catch(() => setTeacherEnabled(false));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const success = await register(name, email, password, role);
+    const success = await register(name, email, password, inviteCode.trim());
     if (success) navigate('/');
   };
 
@@ -47,7 +57,11 @@ export default function Register() {
       <div className="flex items-center justify-center p-8 bg-paper">
         <div className="w-full max-w-sm">
           <h2 className="font-display text-2xl font-semibold mb-1">Create an account</h2>
-          <p className="text-inkmuted text-sm mb-8">Join as a student or a teacher.</p>
+          <p className="text-inkmuted text-sm mb-8">
+            {teacherEnabled
+              ? 'Join as a student, or as a teacher with an invite code.'
+              : 'Create your student account.'}
+          </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -84,28 +98,24 @@ export default function Register() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1.5">Role</label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { value: 'student', label: 'Student' },
-                  { value: 'teacher', label: 'Teacher' },
-                ].map((opt) => (
-                  <button
-                    type="button"
-                    key={opt.value}
-                    onClick={() => setRole(opt.value)}
-                    className={`py-2.5 rounded-card border text-sm font-medium transition-colors ${
-                      role === opt.value
-                        ? 'border-primary bg-primary text-white'
-                        : 'border-line text-inkmuted hover:border-ink'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+            {teacherEnabled && (
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  Teacher invite code{' '}
+                  <span className="text-inkmuted font-normal">(optional)</span>
+                </label>
+                <input
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-card border border-line bg-surface focus:border-primary outline-none transition-colors"
+                  placeholder="Leave empty to join as a student"
+                  autoComplete="off"
+                />
+                <p className="text-xs text-inkmuted mt-1.5">
+                  Ask your institution for this code. Without it you'll be registered as a student.
+                </p>
               </div>
-            </div>
+            )}
 
             {error && (
               <div className="text-sm text-error bg-error-bg px-4 py-2.5 rounded-card">{error}</div>

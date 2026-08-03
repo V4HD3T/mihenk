@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const logger = require('../logger');
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.get('/students', requireAuth, requireRole('teacher'), async (req, res) =>
     `);
     res.json({ students: result.rows });
   } catch (err) {
-    console.error('Student list error:', err);
+    logger.error({ err }, 'Student list failed');
     res.status(500).json({ error: 'Failed to fetch student list' });
   }
 });
@@ -42,7 +43,7 @@ router.get('/students/:id', requireAuth, requireRole('teacher'), async (req, res
 
     res.json({ student: studentResult.rows[0], submissions: submissionsResult.rows });
   } catch (err) {
-    console.error('Student detail error:', err);
+    logger.error({ err }, 'Student detail failed');
     res.status(500).json({ error: 'Failed to fetch student detail' });
   }
 });

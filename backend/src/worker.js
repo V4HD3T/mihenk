@@ -18,8 +18,10 @@ const { Worker } = require('bullmq');
 const createConnection = require('./queue/redis');
 const pool = require('./config/db');
 const { runTestCases } = require('./services/codeExecution.service');
+const logger = require('./logger');
+const { config } = require('./config/env');
 
-const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY) || 4;
+const CONCURRENCY = config().WORKER_CONCURRENCY;
 
 async function gradeSubmission(job) {
   const { submissionId } = job.data;
@@ -82,13 +84,46 @@ const worker = new Worker('grading', gradeSubmission, {
 });
 
 worker.on('completed', (job) => {
-  console.log(`[worker] graded submission ${job.data.submissionId}`);
+  logger.info({ submissionId: job.data.submissionId }, 'graded submission');
 });
 worker.on('failed', async (job, err) => {
-  console.error(`[worker] job for submission ${job?.data?.submissionId} failed:`, err.message);
+  logger.error({ err, submissionId: job?.data?.submissionId }, 'grading job failed');
   if (job?.data?.submissionId) {
     await pool.query("UPDATE submissions SET status = 'error' WHERE id = $1", [job.data.submissionId]).catch(() => {});
   }
 });
 
-console.log(`Grading worker started (concurrency=${CONCURRENCY})`);
+logger.info(`Grading worker started (concurrency=${CONCURRENCY})`);
+
+/**
+ * Finish the submissions already being graded before exiting.
+ *
+ * worker.close() stops taking new jobs and waits for in-flight ones, so a
+ * restart no longer strands submissions in the 'running' state with a student
+ * watching a spinner that will never resolve.
+ */
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`${signal} received, finishing in-flight jobs before exit`);
+
+  const timer = setTimeout(() => {
+    logger.error('Worker shutdown timed out, forcing exit');
+    process.exit(1);
+  }, 30000);
+  timer.unref();
+
+  try {
+    await worker.close();
+    await pool.end();
+    logger.info('Worker shutdown complete');
+    process.exit(0);
+  } catch (err) {
+    logger.error({ err }, 'Error during worker shutdown');
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

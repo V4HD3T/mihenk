@@ -1,4 +1,4 @@
-const { computeFingerprint, compareFingerprints, getMatchedSpans, computeClassReport, tokenize } = require('./src/services/similarity.service');
+const { computeFingerprint, compareFingerprints, getMatchedSpans, computeClassReport } = require('./src/services/similarity.service');
 
 function ok(label, condition, detail) {
   console.log(`[${condition ? 'PASS' : 'FAIL'}] ${label}${detail !== undefined ? ' -> ' + detail : ''}`);

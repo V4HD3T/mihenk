@@ -2,9 +2,11 @@ const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { computeFingerprint, compareFingerprints, getMatchedSpans, computeClassReport } = require('../services/similarity.service');
+const { validate } = require('../middleware/validate');
+const schemas = require('../validation/schemas');
+const logger = require('../logger');
 
 const router = express.Router();
-const VALID_EVENT_TYPES = ['tab_hidden', 'paste'];
 
 // ---------------------------------------------------------------------------
 // Code similarity ("plagiarism screening")
@@ -42,7 +44,7 @@ router.get('/problem/:id/similarity', requireAuth, requireRole('teacher'), async
 
     res.json({ groups });
   } catch (err) {
-    console.error('Similarity report error:', err);
+    logger.error({ err }, 'Similarity report failed');
     res.status(500).json({ error: 'Failed to compute similarity report' });
   }
 });
@@ -88,7 +90,7 @@ router.get('/compare/:idA/:idB', requireAuth, requireRole('teacher'), async (req
       },
     });
   } catch (err) {
-    console.error('Comparison error:', err);
+    logger.error({ err }, 'Comparison failed');
     res.status(500).json({ error: 'Failed to compare submissions' });
   }
 });
@@ -98,13 +100,9 @@ router.get('/compare/:idA/:idB', requireAuth, requireRole('teacher'), async (req
 // ---------------------------------------------------------------------------
 
 // POST /api/integrity/events - the client reports one of its own integrity events
-router.post('/events', requireAuth, async (req, res) => {
+router.post('/events', requireAuth, validate({ body: schemas.integrityEvent }), async (req, res) => {
   try {
     const { exam_id, problem_id, event_type, detail } = req.body;
-    if (!VALID_EVENT_TYPES.includes(event_type)) {
-      return res.status(400).json({ error: 'Invalid event_type' });
-    }
-    if (!exam_id) return res.status(400).json({ error: 'exam_id is required' });
 
     const examResult = await pool.query('SELECT * FROM exams WHERE id = $1', [exam_id]);
     if (examResult.rows.length === 0) return res.status(404).json({ error: 'Exam not found' });
@@ -122,7 +120,7 @@ router.post('/events', requireAuth, async (req, res) => {
     );
     res.status(201).json({ success: true });
   } catch (err) {
-    console.error('Integrity event logging error:', err);
+    logger.error({ err }, 'Integrity event logging failed');
     res.status(500).json({ error: 'Failed to log integrity event' });
   }
 });
@@ -144,7 +142,7 @@ router.get('/exam/:id', requireAuth, requireRole('teacher'), async (req, res) =>
     );
     res.json({ summary: result.rows });
   } catch (err) {
-    console.error('Exam integrity summary error:', err);
+    logger.error({ err }, 'Exam integrity summary failed');
     res.status(500).json({ error: 'Failed to fetch exam integrity summary' });
   }
 });
