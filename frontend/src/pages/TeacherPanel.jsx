@@ -112,8 +112,9 @@ function ProblemForm({ onCreated, courses }) {
 
       <div className="grid sm:grid-cols-3 gap-3">
         <div>
-          <label className="text-xs text-inkmuted uppercase tracking-wide">Python starter code</label>
+          <label htmlFor="teacherpanel-python-starter-code" className="text-xs text-inkmuted uppercase tracking-wide">Python starter code</label>
           <textarea
+            id="teacherpanel-python-starter-code"
             value={form.starter_code_python}
             onChange={(e) => setForm({ ...form, starter_code_python: e.target.value })}
             rows={3}
@@ -121,8 +122,9 @@ function ProblemForm({ onCreated, courses }) {
           />
         </div>
         <div>
-          <label className="text-xs text-inkmuted uppercase tracking-wide">C++ starter code</label>
+          <label htmlFor="teacherpanel-c-starter-code" className="text-xs text-inkmuted uppercase tracking-wide">C++ starter code</label>
           <textarea
+            id="teacherpanel-c-starter-code"
             value={form.starter_code_cpp}
             onChange={(e) => setForm({ ...form, starter_code_cpp: e.target.value })}
             rows={3}
@@ -130,8 +132,9 @@ function ProblemForm({ onCreated, courses }) {
           />
         </div>
         <div>
-          <label className="text-xs text-inkmuted uppercase tracking-wide">Java starter code</label>
+          <label htmlFor="teacherpanel-java-starter-code" className="text-xs text-inkmuted uppercase tracking-wide">Java starter code</label>
           <textarea
+            id="teacherpanel-java-starter-code"
             value={form.starter_code_java}
             onChange={(e) => setForm({ ...form, starter_code_java: e.target.value })}
             rows={3}
@@ -139,8 +142,9 @@ function ProblemForm({ onCreated, courses }) {
           />
         </div>
         <div>
-          <label className="text-xs text-inkmuted uppercase tracking-wide">JavaScript starter code</label>
+          <label htmlFor="teacherpanel-javascript-starter-code" className="text-xs text-inkmuted uppercase tracking-wide">JavaScript starter code</label>
           <textarea
+            id="teacherpanel-javascript-starter-code"
             value={form.starter_code_javascript}
             onChange={(e) => setForm({ ...form, starter_code_javascript: e.target.value })}
             rows={3}
@@ -148,8 +152,9 @@ function ProblemForm({ onCreated, courses }) {
           />
         </div>
         <div>
-          <label className="text-xs text-inkmuted uppercase tracking-wide">C starter code</label>
+          <label htmlFor="teacherpanel-c-starter-code-2" className="text-xs text-inkmuted uppercase tracking-wide">C starter code</label>
           <textarea
+            id="teacherpanel-c-starter-code-2"
             value={form.starter_code_c}
             onChange={(e) => setForm({ ...form, starter_code_c: e.target.value })}
             rows={3}
@@ -157,8 +162,9 @@ function ProblemForm({ onCreated, courses }) {
           />
         </div>
         <div>
-          <label className="text-xs text-inkmuted uppercase tracking-wide">Go starter code</label>
+          <label htmlFor="teacherpanel-go-starter-code" className="text-xs text-inkmuted uppercase tracking-wide">Go starter code</label>
           <textarea
+            id="teacherpanel-go-starter-code"
             value={form.starter_code_go}
             onChange={(e) => setForm({ ...form, starter_code_go: e.target.value })}
             rows={3}
@@ -168,11 +174,12 @@ function ProblemForm({ onCreated, courses }) {
       </div>
 
       <div>
-        <label className="text-xs text-inkmuted uppercase tracking-wide mb-1.5 block">
+        <label htmlFor="teacherpanel-how-should-the-output-be-judged" className="text-xs text-inkmuted uppercase tracking-wide mb-1.5 block">
           How should the output be judged?
         </label>
         <div className="grid sm:grid-cols-2 gap-3">
           <select
+            id="teacherpanel-how-should-the-output-be-judged"
             value={form.checker}
             onChange={(e) => setForm({ ...form, checker: e.target.value, checker_config: {} })}
             className="px-3 py-2 rounded-card border border-line focus:border-primary outline-none"
@@ -212,7 +219,7 @@ function ProblemForm({ onCreated, courses }) {
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-xs text-inkmuted uppercase tracking-wide">Test Cases</label>
+          <label htmlFor="teacherpanel-test-cases" className="text-xs text-inkmuted uppercase tracking-wide">Test Cases</label>
           <button type="button" onClick={addTestCase} className="text-xs text-primary hover:underline">
             + Add test
           </button>
@@ -221,6 +228,7 @@ function ProblemForm({ onCreated, courses }) {
           {form.testCases.map((tc, idx) => (
             <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-start">
               <input
+            id="teacherpanel-test-cases"
                 placeholder="Input"
                 value={tc.input}
                 onChange={(e) => updateTestCase(idx, 'input', e.target.value)}
@@ -233,7 +241,7 @@ function ProblemForm({ onCreated, courses }) {
                 onChange={(e) => updateTestCase(idx, 'expected_output', e.target.value)}
                 className="px-2 py-1.5 rounded-card border border-line font-mono text-xs focus:border-primary outline-none"
               />
-              <label className="flex items-center gap-1 text-xs text-inkmuted whitespace-nowrap px-1">
+              <label htmlFor="teacherpanel-updatetestcase-idx-is-sample-e-target-ch" className="flex items-center gap-1 text-xs text-inkmuted whitespace-nowrap px-1">
                 <input
                   type="checkbox"
                   checked={tc.is_sample}
@@ -342,8 +350,9 @@ function ExamForm({ problems, courses, onCreated }) {
       />
       <div className="grid sm:grid-cols-3 gap-3">
         <div>
-          <label className="text-xs text-inkmuted uppercase tracking-wide">Start</label>
+          <label htmlFor="teacherpanel-start" className="text-xs text-inkmuted uppercase tracking-wide">Start</label>
           <input
+            id="teacherpanel-start"
             required
             type="datetime-local"
             value={startTime}
@@ -352,8 +361,9 @@ function ExamForm({ problems, courses, onCreated }) {
           />
         </div>
         <div>
-          <label className="text-xs text-inkmuted uppercase tracking-wide">End</label>
+          <label htmlFor="teacherpanel-end" className="text-xs text-inkmuted uppercase tracking-wide">End</label>
           <input
+            id="teacherpanel-end"
             required
             type="datetime-local"
             value={endTime}
@@ -362,8 +372,9 @@ function ExamForm({ problems, courses, onCreated }) {
           />
         </div>
         <div>
-          <label className="text-xs text-inkmuted uppercase tracking-wide">Duration (minutes)</label>
+          <label htmlFor="teacherpanel-duration-minutes" className="text-xs text-inkmuted uppercase tracking-wide">Duration (minutes)</label>
           <input
+            id="teacherpanel-duration-minutes"
             required
             type="number"
             min={1}
@@ -375,7 +386,7 @@ function ExamForm({ problems, courses, onCreated }) {
       </div>
 
       <div>
-        <label className="text-xs text-inkmuted uppercase tracking-wide mb-2 block">Problems to include in the exam</label>
+        <label htmlFor="teacherpanel-problems-to-include-in-the-exam" className="text-xs text-inkmuted uppercase tracking-wide mb-2 block">Problems to include in the exam</label>
         {!courseId ? (
           <p className="text-sm text-inkmuted">Pick a course first.</p>
         ) : courseProblems.length === 0 ? (

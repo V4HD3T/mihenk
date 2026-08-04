@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useT } from '../i18n/index.jsx';
 
 export default function Login() {
+  const t = useT();
   const { login, loading, error } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -52,8 +54,11 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1.5">Email</label>
+              <label htmlFor="login-email" className="block text-sm font-medium mb-1.5">Email</label>
               <input
+                id="login-email"
+                name="email"
+                autoComplete="email"
                 type="email"
                 required
                 value={email}
@@ -63,8 +68,11 @@ export default function Login() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5">Password</label>
+              <label htmlFor="login-password" className="block text-sm font-medium mb-1.5">Password</label>
               <input
+                id="login-password"
+                name="password"
+                autoComplete="current-password"
                 type="password"
                 required
                 value={password}
@@ -77,6 +85,12 @@ export default function Login() {
             {error && (
               <div className="text-sm text-error bg-error-bg px-4 py-2.5 rounded-card">{error}</div>
             )}
+
+            <p className="text-right -mt-2">
+              <Link to="/forgot-password" className="text-sm text-primary hover:underline">
+                {t('auth.forgotPassword')}
+              </Link>
+            </p>
 
             <button
               type="submit"

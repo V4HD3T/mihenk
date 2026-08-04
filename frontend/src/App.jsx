@@ -15,6 +15,9 @@ import SubmissionsView from './pages/SubmissionsView';
 import SimilarityReport from './pages/SimilarityReport';
 import Analytics from './pages/Analytics';
 import Courses from './pages/Courses';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
 import CourseRoster from './pages/CourseRoster';
 
 function Home() {
@@ -29,6 +32,10 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        {/* Reached from an emailed link, so these must work signed out. */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
 
         <Route
           path="/"

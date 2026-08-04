@@ -126,6 +126,19 @@ const archiveCourse = z.object({
   source_label: z.string().trim().min(1).max(200).optional(),
 });
 
+const forgotPassword = z.object({
+  email: z.string().trim().toLowerCase().min(1, 'Email is required').max(150),
+});
+
+const resetPassword = z.object({
+  token: z.string().min(1, 'A reset token is required').max(200),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(200),
+});
+
+const verifyEmail = z.object({
+  token: z.string().min(1, 'A verification token is required').max(200),
+});
+
 const integrityEvent = z.object({
   exam_id: z.coerce.number().int().positive(),
   problem_id: z.coerce.number().int().positive().nullish(),
@@ -138,6 +151,9 @@ module.exports = {
   CHECKERS,
   problemGrading,
   archiveCourse,
+  forgotPassword,
+  resetPassword,
+  verifyEmail,
   idParam,
   register,
   login,

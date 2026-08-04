@@ -278,10 +278,18 @@ export default function ProblemSolve() {
         {/* Right: editor + execution */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <div className="flex gap-1.5 bg-surface border border-line rounded-full p-1">
+            {/* A labelled group with pressed state: without it a screen reader
+                announces six unlabelled buttons and never says which is active. */}
+            <div
+              role="group"
+              aria-label="Language"
+              className="flex gap-1.5 bg-surface border border-line rounded-full p-1"
+            >
               {LANGUAGES.map((l) => (
                 <button
                   key={l.value}
+                  type="button"
+                  aria-pressed={language === l.value}
                   onClick={() => handleLanguageChange(l.value)}
                   className={`px-3 py-1 rounded-full text-sm transition-colors ${
                     language === l.value ? 'bg-primary text-white' : 'text-inkmuted hover:text-ink'
@@ -296,8 +304,9 @@ export default function ProblemSolve() {
           <CodeEditor language={language} value={code} onChange={setCode} onPaste={handlePaste} />
 
           <div className="mt-3">
-            <label className="text-xs text-inkmuted uppercase tracking-wide">Input (stdin) — for "Run"</label>
+            <label htmlFor="problemsolve-input-stdin-for-run" className="text-xs text-inkmuted uppercase tracking-wide">Input (stdin) — for "Run"</label>
             <textarea
+            id="problemsolve-input-stdin-for-run"
               value={stdin}
               onChange={(e) => setStdin(e.target.value)}
               rows={2}

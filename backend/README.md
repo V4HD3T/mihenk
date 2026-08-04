@@ -1,6 +1,6 @@
 # CodeCloud - Backend
 
-**Version 0.0.9**
+**Version 0.1.0**
 
 Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam System.
 
@@ -36,6 +36,8 @@ Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam
   a cross-semester plagiarism archive - see "Running at scale" below
 - **Deployable (new in 0.0.9):** a compose stack, production images, nginx, backup/restore and an
   upgrade procedure - see "Deployment" below
+- **Account recovery (new in 0.1.0):** password reset and email confirmation over SMTP, with
+  single-use hashed tokens - see "Email and account recovery" below
 
 ## Setup
 
@@ -178,6 +180,10 @@ toolchains directly, so they need the table above regardless of `SANDBOX_MODE`.
 | POST   | /api/auth/login                     | Log in                                      | -          |
 | GET    | /api/auth/me                        | Current session info                        | Authenticated |
 | GET    | /api/auth/registration-options      | Whether this server accepts a teacher invite code | -    |
+| POST   | /api/auth/forgot-password           | Request a reset link (answer never reveals whether the address exists) | - |
+| POST   | /api/auth/reset-password            | Set a new password with an emailed token     | -          |
+| POST   | /api/auth/verify-email              | Confirm an address with an emailed token     | -          |
+| POST   | /api/auth/resend-verification       | Send the confirmation email again            | Authenticated |
 | GET    | /api/problems                       | List problems                               | Authenticated |
 | GET    | /api/problems/:id                   | Problem detail                              | Authenticated |
 | POST   | /api/problems                       | Create a problem                            | Teacher |
@@ -242,6 +248,34 @@ Before v0.0.5 none of this existed: every authenticated user could read every pr
 student on the server, and any teacher could edit or delete any other teacher's content.
 Upgrading is lossless - `004_courses.sql` moves existing content into one "General" course and
 enrols every existing user in it, so an upgraded installation behaves exactly as it did before.
+
+## Email and account recovery
+
+Password reset and address confirmation both need to send mail. Set `SMTP_HOST` (and credentials
+if your server wants them) and `PUBLIC_URL`, which is where the links point.
+
+With `SMTP_HOST` unset, development **logs** each message instead of sending it, so a reset link
+is visible in the console and the flow works without an SMTP server. Production refuses to start
+in that state - a deployment that silently stopped sending password resets and wrote them to a
+log file would be worse than one that fails immediately. Set `MAIL_TRANSPORT=log` to accept it
+deliberately.
+
+The rules the implementation follows, and why:
+
+- **`forgot-password` answers identically whether or not the address exists.** Otherwise the
+  endpoint becomes a way to test which addresses are registered - for a university install, that
+  means confirming who is enrolled.
+- **Only the SHA-256 hash of a token is stored.** A database leak would otherwise hand over
+  working reset links for every pending request. It is not bcrypt: these are 256-bit random
+  values, not user-chosen passwords, so there is nothing to slow-hash against.
+- **Redeeming is a single `UPDATE ... RETURNING` that both checks and consumes.** A `SELECT` then
+  `UPDATE` would let two simultaneous requests both pass the check.
+- **Issuing a new token invalidates the outstanding ones**, so an older leaked link stops working
+  and a user who clicks twice isn't confused about which email to use.
+- **A completed reset also confirms the address**, since reaching the inbox proved it.
+
+`REQUIRE_EMAIL_VERIFICATION` is `false` by default: an unconfirmed account still works. Turn it on
+only once email is known to be working.
 
 ## Deployment
 

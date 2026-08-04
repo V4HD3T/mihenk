@@ -2,6 +2,63 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.0] - First Beta
+
+Nine releases of backend depth on a frontend nobody had ever tested. This one
+closes that, adds the half of account management that was missing, and makes the
+interface usable in Turkish.
+
+### Added
+- **A frontend test suite.** 23 source files had zero tests; there are now 32,
+  covering sign-up and sign-in, joining a course, solving a problem (starter
+  code, draft restore, verdict display), language switching and the recovery
+  pages - plus an axe accessibility check on every page they touch. Wired into
+  CI.
+- **Password reset and email confirmation**, over SMTP. Verified end to end
+  against a real SMTP server: the link is pulled out of the delivered message
+  and used, rather than asserting that a function was called.
+- **Turkish and English**, switchable from the top bar and remembered. A test
+  holds the two catalogues to the same key set, checks no Turkish string is
+  still the English original, and checks placeholders survive translation - the
+  three ways translations rot.
+
+### Fixed
+- **Not one form label in the application was associated with its input.**
+  Twenty labels, zero `htmlFor`, zero input `id`s. A screen reader announced
+  unlabelled fields, so the interface could not be filled in without sight.
+  The frontend tests found this on their first run, which is a fair summary of
+  what nine releases without them had cost.
+- The language picker on the solve page was six unlabelled buttons with no
+  indication of which was active. It is now a labelled group with `aria-pressed`.
+
+### Security
+- `forgot-password` answers identically whether or not the address exists.
+  Anything else turns it into a way to test who has an account - for a
+  university install, who is enrolled.
+- Only the SHA-256 hash of a reset or verification token is stored, so a
+  database leak yields no working links.
+- Redeeming a token is a single `UPDATE ... RETURNING` that both checks and
+  consumes it, so a forwarded link cannot be replayed and two simultaneous
+  requests cannot both succeed.
+- Requesting a new link invalidates the outstanding one.
+- With no `SMTP_HOST`, production **refuses to start** rather than quietly
+  writing password resets to a log file. Development logs them, so the flow
+  works without a mail server and the link is visible in the console.
+
+### Verified
+177 backend tests and 32 frontend tests. Account recovery ran against a real
+SMTP catcher, including the replay, supersession and no-enumeration properties;
+CI now runs one alongside Postgres and Redis so those stay covered.
+
+### Known limitations (tracked for future versions)
+- Only the highest-traffic pages are translated so far; the teacher panel and
+  analytics still contain English strings
+- `REQUIRE_EMAIL_VERIFICATION` defaults to off - turning it on locks out anyone
+  whose address never received mail
+- No email for anything else yet (exam reminders, grade posted)
+- Accessibility is checked by axe, which catches structural problems but not
+  everything a person using a screen reader would find
+
 ## [0.0.9] - Deployable
 
 Eight releases of features that could only run on a developer's laptop. This one

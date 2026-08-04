@@ -20,6 +20,7 @@
 
 DROP TABLE IF EXISTS schema_migrations CASCADE;
 DROP TABLE IF EXISTS integrity_events CASCADE;
+DROP TABLE IF EXISTS auth_tokens CASCADE;
 DROP TABLE IF EXISTS archived_submissions CASCADE;
 DROP TABLE IF EXISTS submission_drafts CASCADE;
 DROP TABLE IF EXISTS exam_grade_overrides CASCADE;
@@ -49,6 +50,24 @@ CREATE TABLE users (
   email VARCHAR(150) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   role user_role NOT NULL DEFAULT 'student',
+  -- NULL until the address is confirmed. Verification is advisory by default:
+  -- see REQUIRE_EMAIL_VERIFICATION.
+  email_verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Short-lived secrets for password reset and email verification.
+--
+-- Only the SHA-256 hash of each token is stored. A leaked database would
+-- otherwise hand over working reset links for every pending request.
+CREATE TABLE auth_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose VARCHAR(30) NOT NULL CHECK (purpose IN ('password_reset', 'email_verification')),
+  token_hash CHAR(64) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  -- Set when redeemed, so a token works exactly once.
+  used_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -242,6 +261,9 @@ CREATE INDEX idx_grade_overrides_exam ON exam_grade_overrides(exam_id);
 CREATE INDEX idx_archived_owner ON archived_submissions(owner_id);
 CREATE INDEX idx_archived_problem_title ON archived_submissions(problem_title);
 CREATE INDEX idx_archived_language ON archived_submissions(language);
+CREATE UNIQUE INDEX idx_auth_tokens_hash ON auth_tokens(token_hash);
+CREATE INDEX idx_auth_tokens_user ON auth_tokens(user_id, purpose);
+CREATE INDEX idx_auth_tokens_expiry ON auth_tokens(expires_at);
 -- COALESCE keeps practice drafts (exam_id IS NULL) distinct from exam drafts
 -- without needing a sentinel value, and gives ON CONFLICT something to target.
 CREATE UNIQUE INDEX idx_drafts_unique
@@ -263,4 +285,5 @@ INSERT INTO schema_migrations (filename) VALUES
   ('005_exam_experience.sql'),
   ('006_timestamptz.sql'),
   ('007_evaluation.sql'),
-  ('008_similarity_archive.sql');
+  ('008_similarity_archive.sql'),
+  ('009_account_recovery.sql');

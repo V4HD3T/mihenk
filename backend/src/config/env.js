@@ -87,6 +87,30 @@ const schema = z.object({
 
   LOG_LEVEL: z.string().optional(),
 
+  // Email. Without SMTP_HOST, development logs messages instead of sending
+  // them (so a reset link is visible in the console) and production refuses to
+  // start - silently not sending password resets is worse than failing loudly.
+  MAIL_TRANSPORT: z.enum(['smtp', 'log', 'silent']).optional(),
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: numeric(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  MAIL_FROM: z.string().default('CodeCloud <no-reply@codecloud.local>'),
+
+  // Where the links in those emails point. Same value as PUBLIC_ORIGIN in a
+  // compose deployment.
+  PUBLIC_URL: z.string().default('http://localhost:5173'),
+
+  PASSWORD_RESET_TTL_MIN: numeric(60),
+  EMAIL_VERIFICATION_TTL_HOURS: numeric(48),
+  // Advisory by default: an unverified account still works, it is just flagged.
+  // Turning this on blocks sign-in until the address is confirmed, which needs
+  // working email first.
+  REQUIRE_EMAIL_VERIFICATION: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   // GET /metrics is operational detail (queue depth, failure rates, host stats).
   // Unset = the endpoint is disabled entirely rather than public by default.
   METRICS_TOKEN: z.string().min(1).optional(),

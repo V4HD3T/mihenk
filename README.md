@@ -1,7 +1,7 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.0.9**
+**Version 0.1.0**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
@@ -63,6 +63,8 @@ network-less Docker container (`SANDBOX_MODE=docker`), so the host needs Docker 
 toolchains. Set `SANDBOX_MODE=host` to run code directly on your machine instead — convenient
 without Docker, but it then needs `python3`, `g++`/`gcc`, a JDK and `node` installed, and it is
 not safe for untrusted users. See `backend/README.md`.
+
+**Language:** the interface is available in Turkish and English, switchable from the top bar.
 
 **Accounts:** signing up creates a student. Teacher accounts require the server's
 `TEACHER_INVITE_CODE` (see `backend/README.md`) — the client cannot choose its own role.
@@ -134,6 +136,12 @@ procedure. Fixing it along the way: the documented first-deploy command didn't w
 numbered migrations describe changes *since* the first release and there was nothing for them to
 build on — `npm run migrate` now creates the schema on an empty database and refuses to touch one
 that holds data.
+
+v0.1.0 is the first beta. The frontend went from zero tests to a suite covering the critical
+flows, which immediately found that not one form label in the application was associated with its
+input - twenty of them - so the interface was unusable with a screen reader. Password reset and
+email confirmation arrived, verified end to end against a real SMTP server. The interface is now
+Turkish and English, with the two catalogues held in sync by a test.
 
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants

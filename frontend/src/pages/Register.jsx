@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useT } from '../i18n/index.jsx';
 import api from '../api/axios';
 
 export default function Register() {
+  const t = useT();
   const { register, loading, error } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState('');
@@ -56,55 +58,66 @@ export default function Register() {
 
       <div className="flex items-center justify-center p-8 bg-paper">
         <div className="w-full max-w-sm">
-          <h2 className="font-display text-2xl font-semibold mb-1">Create an account</h2>
+          <h2 className="font-display text-2xl font-semibold mb-1">{t('auth.createAccount')}</h2>
           <p className="text-inkmuted text-sm mb-8">
             {teacherEnabled
-              ? 'Join as a student, or as a teacher with an invite code.'
-              : 'Create your student account.'}
+              ? t('auth.joinAsStudentOrTeacher')
+              : t('auth.createStudentAccount')}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1.5">Full name</label>
+              <label htmlFor="register-name" className="block text-sm font-medium mb-1.5">{t('auth.fullName')}</label>
               <input
+                id="register-name"
+                name="name"
+                autoComplete="name"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-card border border-line bg-surface focus:border-primary outline-none transition-colors"
-                placeholder="Your full name"
+                placeholder={t('auth.fullNamePlaceholder')}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5">Email</label>
+              <label htmlFor="register-email" className="block text-sm font-medium mb-1.5">Email</label>
               <input
+                id="register-email"
+                name="email"
+                autoComplete="email"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-card border border-line bg-surface focus:border-primary outline-none transition-colors"
-                placeholder="you@university.edu"
+                placeholder={t('auth.emailPlaceholder')}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5">Password</label>
+              <label htmlFor="register-password" className="block text-sm font-medium mb-1.5">Password</label>
               <input
+                id="register-password"
+                name="password"
+                autoComplete="new-password"
                 type="password"
                 required
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-card border border-line bg-surface focus:border-primary outline-none transition-colors"
-                placeholder="At least 6 characters"
+                placeholder={t('auth.passwordPlaceholder')}
               />
             </div>
 
             {teacherEnabled && (
               <div>
-                <label className="block text-sm font-medium mb-1.5">
+                <label htmlFor="register-invite" className="block text-sm font-medium mb-1.5">
                   Teacher invite code{' '}
                   <span className="text-inkmuted font-normal">(optional)</span>
                 </label>
                 <input
+                  id="register-invite"
+                  name="inviteCode"
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-card border border-line bg-surface focus:border-primary outline-none transition-colors"
@@ -126,12 +139,12 @@ export default function Register() {
               disabled={loading}
               className="w-full py-2.5 rounded-card bg-primary text-white font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
             >
-              {loading ? 'Creating account…' : 'Create account'}
+              {loading ? t('auth.creating') : t('auth.createAccountAction')}
             </button>
           </form>
 
           <p className="text-sm text-inkmuted mt-6">
-            Already have an account?{' '}
+            {t('auth.haveAccount')}{' '}
             <Link to="/login" className="text-primary font-medium hover:underline">
               Log in
             </Link>
