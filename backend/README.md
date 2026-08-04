@@ -107,6 +107,12 @@ Both processes shut down gracefully on `SIGINT`/`SIGTERM`: the API drains in-fli
 the worker finishes the submissions it is currently grading, so a restart never strands a
 submission in the `running` state.
 
+### Node version
+
+Node 24 (npm 11). CI pins the same major deliberately: npm 10 and npm 11 write
+and validate lockfiles differently around platform-specific optional
+dependencies, and a lockfile generated on one can fail `npm ci` on the other.
+
 ### Tests and linting
 
 ```bash
