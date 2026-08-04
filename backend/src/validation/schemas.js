@@ -8,7 +8,7 @@
 
 const { z } = require('zod');
 
-const LANGUAGES = ['python', 'cpp', 'java', 'javascript', 'c'];
+const LANGUAGES = ['python', 'cpp', 'java', 'javascript', 'c', 'go'];
 
 // Route params arrive as strings; coerce to a positive integer so a request
 // like GET /api/submissions/abc is a clean 400 instead of a Postgres error.
@@ -111,6 +111,17 @@ const draftQuery = z.object({
   exam_id: z.coerce.number().int().positive().optional(),
 });
 
+const CHECKERS = ['exact', 'case_insensitive', 'float', 'unordered_lines', 'unordered_tokens', 'regex'];
+
+const problemGrading = z.object({
+  checker: z.enum(CHECKERS).optional().default('exact'),
+  checker_config: z.record(z.string(), z.unknown()).optional().default({}),
+  // Bounds match the database CHECK constraints, so a bad value is a clean 400
+  // rather than a constraint violation surfacing as a 500.
+  time_limit_sec: z.coerce.number().int().min(1).max(60).nullish(),
+  memory_limit_mb: z.coerce.number().int().min(64).max(2048).nullish(),
+});
+
 const integrityEvent = z.object({
   exam_id: z.coerce.number().int().positive(),
   problem_id: z.coerce.number().int().positive().nullish(),
@@ -120,6 +131,8 @@ const integrityEvent = z.object({
 
 module.exports = {
   LANGUAGES,
+  CHECKERS,
+  problemGrading,
   idParam,
   register,
   login,

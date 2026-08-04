@@ -38,7 +38,7 @@ DROP TYPE IF EXISTS language_type;
 DROP TYPE IF EXISTS submission_status;
 
 CREATE TYPE user_role AS ENUM ('student', 'teacher');
-CREATE TYPE language_type AS ENUM ('python', 'cpp', 'java', 'javascript', 'c');
+CREATE TYPE language_type AS ENUM ('python', 'cpp', 'java', 'javascript', 'c', 'go');
 CREATE TYPE submission_status AS ENUM ('completed', 'error', 'queued', 'running');
 
 -- Users (student / teacher)
@@ -84,6 +84,16 @@ CREATE TABLE problems (
   starter_code_java TEXT NOT NULL DEFAULT '',
   starter_code_javascript TEXT NOT NULL DEFAULT '',
   starter_code_c TEXT NOT NULL DEFAULT '',
+  starter_code_go TEXT NOT NULL DEFAULT '',
+  -- How this problem's output is judged. 'exact' is a byte comparison after
+  -- whitespace normalisation; the others exist because that fails plenty of
+  -- correct answers (float formatting, set-valued answers with no fixed order).
+  checker VARCHAR(30) NOT NULL DEFAULT 'exact'
+    CHECK (checker IN ('exact', 'case_insensitive', 'float', 'unordered_lines', 'unordered_tokens', 'regex')),
+  checker_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- NULL = use the server defaults.
+  time_limit_sec INTEGER CHECK (time_limit_sec IS NULL OR (time_limit_sec BETWEEN 1 AND 60)),
+  memory_limit_mb INTEGER CHECK (memory_limit_mb IS NULL OR (memory_limit_mb BETWEEN 64 AND 2048)),
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -135,6 +145,9 @@ CREATE TABLE submissions (
   total_count INTEGER NOT NULL DEFAULT 0,
   execution_time_ms INTEGER NOT NULL DEFAULT 0,
   results_json JSONB,
+  -- accepted | wrong_answer | time_limit_exceeded | memory_limit_exceeded |
+  -- runtime_error | compile_error | output_limit_exceeded
+  verdict VARCHAR(30),
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -228,4 +241,5 @@ INSERT INTO schema_migrations (filename) VALUES
   ('003_cloud_execution.sql'),
   ('004_courses.sql'),
   ('005_exam_experience.sql'),
-  ('006_timestamptz.sql');
+  ('006_timestamptz.sql'),
+  ('007_evaluation.sql');

@@ -37,13 +37,32 @@ async function gradeSubmission(job) {
     [submission.problem_id]
   );
 
-  const gradeResult = await runTestCases(submission.language, submission.code, testCasesResult.rows);
+  // How this problem wants its output judged, and how much room it gets.
+  const problemResult = await pool.query(
+    'SELECT checker, checker_config, time_limit_sec, memory_limit_mb FROM problems WHERE id = $1',
+    [submission.problem_id]
+  );
+  const problem = problemResult.rows[0] || {};
+
+  const gradeResult = await runTestCases(submission.language, submission.code, testCasesResult.rows, {
+    checker: problem.checker || 'exact',
+    checkerConfig: problem.checker_config || {},
+    limits: {
+      timeLimitSec: problem.time_limit_sec || undefined,
+      memoryMb: problem.memory_limit_mb || undefined,
+    },
+  });
   const totalTimeMs = gradeResult.results.reduce((sum, r) => sum + (r.executionTimeMs || 0), 0);
 
   // Same "hide hidden-test output from students" rule as the old synchronous endpoint.
   const visibleResults = gradeResult.results.map((r) => ({
     test_case_id: r.test_case_id,
     passed: r.passed,
+    // The verdict is safe to show for hidden tests too: it says *how* the run
+    // failed, not what the expected output was.
+    verdict: r.verdict,
+    verdictLabel: r.verdictLabel,
+    verdictReason: r.verdictReason,
     is_sample: r.is_sample,
     stdout: r.is_sample ? r.stdout : undefined,
     stderr: r.is_sample ? r.stderr : undefined,
@@ -53,14 +72,16 @@ async function gradeSubmission(job) {
 
   await pool.query(
     `UPDATE submissions
-     SET status = $1, passed_count = $2, total_count = $3, execution_time_ms = $4, results_json = $5
-     WHERE id = $6`,
+     SET status = $1, passed_count = $2, total_count = $3, execution_time_ms = $4,
+         results_json = $5, verdict = $6
+     WHERE id = $7`,
     [
       gradeResult.compileError ? 'error' : 'completed',
       gradeResult.passedCount,
       gradeResult.totalCount,
       totalTimeMs,
       JSON.stringify(resultsJson),
+      gradeResult.verdict || null,
       submissionId,
     ]
   );
@@ -73,6 +94,7 @@ async function gradeSubmission(job) {
     passedCount: gradeResult.passedCount,
     totalCount: gradeResult.totalCount,
     status: gradeResult.compileError ? 'error' : 'completed',
+    verdict: gradeResult.verdict || null,
     compileError: gradeResult.compileError || null,
     results: visibleResults,
   };

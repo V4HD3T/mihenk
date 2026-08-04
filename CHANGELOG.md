@@ -2,6 +2,64 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.0.7] - Evaluation Engine
+
+Grading was a single string comparison. That marks plenty of correct answers
+wrong, and told a student nothing about why their submission failed.
+
+### Added
+- **Output checkers**, chosen per problem. `exact` remains the default, so
+  existing problems are graded exactly as before.
+  - `float` - numeric comparison within a tolerance (absolute *or* relative, so
+    it works near zero and at 1e12). `0.1 + 0.2` printing
+    `0.30000000000000004` now passes against `0.3`.
+  - `unordered_lines` / `unordered_tokens` - for answers that are a set with no
+    correct order, compared as multisets so duplicates still matter.
+  - `case_insensitive` - for `YES`/`Yes`.
+  - `regex` - the whole output must match the pattern, not merely contain it.
+- **Verdicts.** A failure is now classified as wrong answer, time limit,
+  memory limit, runtime error, compile error or output limit, with a readable
+  reason ("Segmentation fault - an invalid memory access", "token 3: expected
+  1.5, got 1.7"). Shown to the student, and stored on the submission. Safe to
+  show for hidden tests too: a verdict says how the run ended, never what the
+  expected output was.
+- **Per-problem time and memory limits**, so a deliberately heavy problem can
+  be given more room without loosening the limits server-wide.
+- **A separate, larger budget for compiling** (`EXEC_COMPILE_TIME_LIMIT_SEC`,
+  default 30s). Compile and run shared one budget before, which is wrong in
+  both directions: a heavily-templated C++ file can legitimately take longer to
+  compile than the problem's entire run budget.
+- **Go**, as a sixth language, with sandbox image, similarity-engine keywords
+  and starter code.
+
+### Fixed
+- **The test suite was intermittently red.** Both integration suites rebuild the
+  schema in `beforeAll` against the same database, and vitest runs files in
+  parallel by default - so one suite could drop the tables the other was using.
+  Test files now run one at a time; the whole suite still finishes in ~2s.
+
+### Notes on the Go image
+A cold Go build cache costs **31.7s per compile** on a `--cpus=0.5` container,
+because Go rebuilds the standard library whenever `GOCACHE` is empty - which,
+with a fresh tmpfs per run, is every submission. That blew past the compile
+timeout and failed every Go submission. The image now bakes a warm 31 MB cache
+in at build time, bringing a compile to **~0.3s**, and it stays read-only at
+runtime.
+
+### Verified
+All six languages compile and run end-to-end through the container sandbox
+(Go 713ms, Java 2.2s, the rest under a second). Every checker and every verdict
+was exercised against real containers, including deliberately hitting the memory
+cap and the wall clock. 47 new unit tests cover grading correctness alone -
+138 total, run five times consecutively to confirm the flakiness is gone.
+
+### Known limitations (tracked for future versions)
+- Problems are still stdin/stdout only; function-signature problems (write a
+  function, we supply the harness) are a larger change and not started
+- No per-test-case checker override; the checker is per problem
+- No performance/complexity testing beyond the wall clock
+- Rust and C# were considered alongside Go but not included
+
 ## [0.0.6] - Exam Experience
 
 ### Fixed

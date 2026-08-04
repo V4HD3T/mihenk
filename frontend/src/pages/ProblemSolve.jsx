@@ -11,6 +11,7 @@ const LANGUAGES = [
   { value: 'java', label: 'Java' },
   { value: 'javascript', label: 'JavaScript' },
   { value: 'c', label: 'C' },
+  { value: 'go', label: 'Go' },
 ];
 
 export default function ProblemSolve() {
@@ -136,6 +137,7 @@ export default function ProblemSolve() {
       java: problem.starter_code_java,
       javascript: problem.starter_code_javascript,
       c: problem.starter_code_c,
+      go: problem.starter_code_go,
     };
     setCode(starterMap[lang] || '');
   };
@@ -383,6 +385,25 @@ export default function ProblemSolve() {
                 </span>
               </div>
               <ResultBubbles results={submitResult.results} totalCount={submitResult.totalCount} />
+
+              {/* Why it failed, not just that it did. The verdict is safe to
+                  show even for hidden tests: it describes how the run ended,
+                  never what the expected output was. */}
+              {(() => {
+                const firstFailure = (submitResult.results || []).find(
+                  (r) => r.verdict && r.verdict !== 'accepted'
+                );
+                if (!firstFailure) return null;
+                return (
+                  <div className="mt-3 text-sm">
+                    <span className="font-medium text-error">{firstFailure.verdictLabel}</span>
+                    {firstFailure.verdictReason && (
+                      <span className="text-inkmuted"> — {firstFailure.verdictReason}</span>
+                    )}
+                  </div>
+                );
+              })()}
+
               {submitResult.compileError && (
                 <pre className="mt-3 text-xs text-error whitespace-pre-wrap font-mono">{submitResult.compileError}</pre>
               )}

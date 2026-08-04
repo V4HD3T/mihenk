@@ -32,6 +32,9 @@ const schema = z.object({
   TEACHER_INVITE_CODE: z.string().min(1).optional(),
 
   EXEC_TIME_LIMIT_SEC: numeric(5),
+  // Compiling gets its own, larger budget: a templated C++ file can take longer
+  // to compile than the problem's whole run budget.
+  EXEC_COMPILE_TIME_LIMIT_SEC: numeric(30),
   EXEC_MEMORY_LIMIT_KB: numeric(524288),
   EXEC_MAX_OUTPUT_CHARS: numeric(100000),
 

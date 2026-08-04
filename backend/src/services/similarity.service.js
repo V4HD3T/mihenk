@@ -49,8 +49,16 @@ const JAVASCRIPT_KEYWORDS = new Set(
     'await true false null undefined console log').split(' ')
 );
 
+const GO_KEYWORDS = new Set(
+  ('break case chan const continue default defer else fallthrough for func go goto if import interface map package ' +
+    'range return select struct switch type var bool byte complex64 complex128 error float32 float64 int int8 int16 ' +
+    'int32 int64 rune string uint uint8 uint16 uint32 uint64 uintptr true false iota nil append cap close copy delete ' +
+    'len make new panic print println recover fmt Println Printf Scan Sprintf').split(' ')
+);
+
 function keywordSetFor(language) {
   if (language === 'python') return PYTHON_KEYWORDS;
+  if (language === 'go') return GO_KEYWORDS;
   if (language === 'java') return JAVA_KEYWORDS;
   if (language === 'javascript') return JAVASCRIPT_KEYWORDS;
   return CPP_KEYWORDS; // 'c' shares the C++ set - a strict superset for this purpose, so nothing is missed

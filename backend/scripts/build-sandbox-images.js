@@ -33,6 +33,7 @@ const TOOLCHAIN_CHECK = {
   java: 'javac -version 2>&1 | head -1',
   javascript: 'node --version',
   c: 'gcc --version | head -1',
+  go: 'go version',
 };
 
 const LANGUAGES = Object.keys(TOOLCHAIN_CHECK);

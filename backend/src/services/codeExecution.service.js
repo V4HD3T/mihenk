@@ -32,6 +32,8 @@ const crypto = require('crypto');
 require('dotenv').config();
 const { config } = require('../config/env');
 const sandbox = require('./sandbox');
+const { check } = require('./checker.service');
+const { classify, summarize, VERDICTS } = require('./verdict.service');
 
 const env = config();
 const TIME_LIMIT_SEC = env.EXEC_TIME_LIMIT_SEC;
@@ -78,11 +80,39 @@ const LANGUAGE_CONFIG = {
     compile: () => `gcc -O2 -std=c17 -lm -o main main.c`,
     run: () => `ulimit -v ${MEMORY_LIMIT_KB}; ./main`,
   },
+  go: {
+    filename: 'main.go',
+    // The image pins GOCACHE/GOPATH into /tmp and GO111MODULE=off, so a bare
+    // main.go compiles without a go.mod.
+    compile: () => `go build -o main main.go`,
+    // ulimit -v fights the Go runtime's upfront virtual memory reservation the
+    // same way it does the JVM's, so the container's memory cap is the limit.
+    run: () => `./main`,
+  },
 };
 
-function normalizeOutput(output) {
-  return (output || '').replace(/\r\n/g, '\n').trimEnd();
-}
+/**
+ * Where a language needs more room than the defaults.
+ *
+ * Measured, not guessed. Go's toolchain needs scratch space under /tmp for its
+ * intermediate output; the default 16 MB is enough for small programs now that
+ * the image ships a warm build cache (see docker/go.Dockerfile), but 64 MB
+ * leaves headroom for larger submissions without the failure being a cryptic
+ * "no space left on device". Memory was fine at the 256 MB default.
+ */
+const LANGUAGE_RESOURCES = {
+  go: { tmpfsMb: 64 },
+};
+
+/**
+ * Compiling is given its own, larger budget than running.
+ *
+ * They were the same until v0.0.7, which is wrong in both directions: a
+ * heavily-templated C++ file can legitimately take longer to compile than the
+ * problem's entire run budget, while a generous compile budget shouldn't let a
+ * submission loop for that long at run time.
+ */
+const COMPILE_TIME_LIMIT_SEC = env.EXEC_COMPILE_TIME_LIMIT_SEC;
 
 function truncate(text) {
   if (text.length <= MAX_OUTPUT_CHARS) return text;
@@ -96,7 +126,7 @@ function truncate(text) {
  * client does NOT stop the container it started, so the container has to be
  * killed by name as well or it keeps burning CPU after we've given up on it.
  */
-function spawnCollect(file, args, { cwd, stdin, onHardTimeout } = {}) {
+function spawnCollect(file, args, { cwd, stdin, onHardTimeout, timeLimitSec = TIME_LIMIT_SEC } = {}) {
   return new Promise((resolve) => {
     const start = Date.now();
     let stdout = '';
@@ -110,7 +140,7 @@ function spawnCollect(file, args, { cwd, stdin, onHardTimeout } = {}) {
       killedForTimeout = true;
       if (onHardTimeout) onHardTimeout();
       child.kill('SIGKILL');
-    }, (TIME_LIMIT_SEC + 2) * 1000); // generous upper bound covering compile + run
+    }, (timeLimitSec + 2) * 1000); // generous upper bound covering compile + run
 
     child.stdout.on('data', (d) => {
       stdout += d.toString();
@@ -168,15 +198,21 @@ function spawnCollect(file, args, { cwd, stdin, onHardTimeout } = {}) {
  * executes it inside a throwaway container instead of on this host, so
  * compile and run semantics don't drift between the two.
  */
-function runSandboxed(command, workDir, stdin, { language, backend }) {
+function runSandboxed(command, workDir, stdin, { language, backend, limits = {} }) {
+  const timeLimitSec = limits.timeLimitSec || TIME_LIMIT_SEC;
+
   if (backend !== 'docker') {
-    return spawnCollect('bash', ['-c', command], { cwd: workDir, stdin });
+    return spawnCollect('bash', ['-c', command], { cwd: workDir, stdin, timeLimitSec });
   }
 
   // Named so the container can still be killed if the CLI has to be SIGKILLed.
   const containerName = `codecloud-run-${crypto.randomUUID()}`;
-  const memoryMb =
+  // A problem may ask for more room than the default; the JVM needs a bigger
+  // floor than everything else before it will even start.
+  const defaultMemoryMb =
     language === 'java' ? env.SANDBOX_JAVA_MEMORY_MB : env.SANDBOX_MEMORY_MB;
+  const memoryMb = Math.max(limits.memoryMb || 0, defaultMemoryMb);
+  const resources = LANGUAGE_RESOURCES[language] || {};
 
   const args = sandbox.buildDockerArgs({
     image: sandbox.imageFor(language),
@@ -186,13 +222,14 @@ function runSandboxed(command, workDir, stdin, { language, backend }) {
     memoryMb,
     cpus: env.SANDBOX_CPUS,
     pidsLimit: env.SANDBOX_PIDS_LIMIT,
-    tmpfsMb: env.SANDBOX_TMPFS_MB,
+    tmpfsMb: resources.tmpfsMb || env.SANDBOX_TMPFS_MB,
     uid: SANDBOX_UID,
     gid: SANDBOX_GID,
   });
 
   return spawnCollect('docker', args, {
     stdin,
+    timeLimitSec,
     onHardTimeout: () => {
       // Fire-and-forget: we already have our answer (timed out), this is just
       // making sure the container doesn't outlive it.
@@ -217,7 +254,10 @@ async function prepareWorkDir(language, code) {
 
 async function compileIfNeeded(config, workDir, ctx) {
   if (!config.compile) return { success: true, stderr: '' };
-  const result = await runSandboxed(config.compile(workDir), workDir, '', ctx);
+  const result = await runSandboxed(config.compile(workDir), workDir, '', {
+    ...ctx,
+    limits: { ...ctx.limits, timeLimitSec: COMPILE_TIME_LIMIT_SEC },
+  });
   return {
     success: result.exitCode === 0 && !result.timedOut,
     stderr: result.stderr || result.stdout || 'Compilation error (no details available)',
@@ -225,8 +265,8 @@ async function compileIfNeeded(config, workDir, ctx) {
 }
 
 /** Wraps a language's run command in the same in-sandbox wall-clock timeout. */
-function runCommandFor(config, workDir) {
-  return `timeout ${TIME_LIMIT_SEC}s bash -c '${config.run(workDir).replace(/'/g, `'\\''`)}'`;
+function runCommandFor(config, workDir, timeLimitSec = TIME_LIMIT_SEC) {
+  return `timeout ${timeLimitSec}s bash -c '${config.run(workDir).replace(/'/g, `'\\''`)}'`;
 }
 
 async function cleanup(workDir) {
@@ -236,10 +276,11 @@ async function cleanup(workDir) {
 /**
  * Single run - used by the "Run" button (with free-form stdin).
  */
-async function executeCode(language, code, stdin = '') {
+async function executeCode(language, code, stdin = '', options = {}) {
   const backend = await sandbox.resolveBackend();
   sandbox._logBackendOnce(backend);
-  const ctx = { language, backend };
+  const limits = options.limits || {};
+  const ctx = { language, backend, limits };
 
   const { workDir, config } = await prepareWorkDir(language, code);
   try {
@@ -254,7 +295,12 @@ async function executeCode(language, code, stdin = '') {
         stage: 'compile',
       };
     }
-    const runResult = await runSandboxed(runCommandFor(config, workDir), workDir, stdin, ctx);
+    const runResult = await runSandboxed(
+      runCommandFor(config, workDir, limits.timeLimitSec),
+      workDir,
+      stdin,
+      ctx
+    );
     return { ...runResult, stage: 'run' };
   } finally {
     await cleanup(workDir);
@@ -266,10 +312,14 @@ async function executeCode(language, code, stdin = '') {
  * Compilation happens ONLY ONCE, then the same binary/file is run against
  * each test input.
  */
-async function runTestCases(language, code, testCases) {
+async function runTestCases(language, code, testCases, options = {}) {
   const backend = await sandbox.resolveBackend();
   sandbox._logBackendOnce(backend);
-  const ctx = { language, backend };
+  // How this problem wants its output judged, and how much room it gets.
+  const checker = options.checker || 'exact';
+  const checkerConfig = options.checkerConfig || {};
+  const limits = options.limits || {};
+  const ctx = { language, backend, limits };
 
   const { workDir, config } = await prepareWorkDir(language, code);
   try {
@@ -279,6 +329,8 @@ async function runTestCases(language, code, testCases) {
         results: testCases.map((tc) => ({
           test_case_id: tc.id,
           passed: false,
+          verdict: VERDICTS.COMPILE_ERROR,
+          verdictLabel: 'Compile error',
           is_sample: tc.is_sample,
           stdout: '',
           stderr: compileResult.stderr,
@@ -288,6 +340,7 @@ async function runTestCases(language, code, testCases) {
         passedCount: 0,
         totalCount: testCases.length,
         compileError: compileResult.stderr,
+        verdict: VERDICTS.COMPILE_ERROR,
       };
     }
 
@@ -301,12 +354,25 @@ async function runTestCases(language, code, testCases) {
     // nobody is waiting on the difference.
     const results = [];
     for (const tc of testCases) {
-      const r = await runSandboxed(runCommandFor(config, workDir), workDir, tc.input || '', ctx);
-      const passed =
-        !r.timedOut && r.exitCode === 0 && normalizeOutput(r.stdout) === normalizeOutput(tc.expected_output);
+      const r = await runSandboxed(
+        runCommandFor(config, workDir, limits.timeLimitSec),
+        workDir,
+        tc.input || '',
+        ctx
+      );
+
+      // Two separate questions, deliberately kept apart: did the program run
+      // successfully, and is its output the right answer? Conflating them is
+      // what made every failure look identical before v0.0.7.
+      const checkResult = check(r.stdout, tc.expected_output, checker, checkerConfig);
+      const { verdict, label, reason } = classify(r, checkResult);
+
       results.push({
         test_case_id: tc.id,
-        passed,
+        passed: verdict === VERDICTS.ACCEPTED,
+        verdict,
+        verdictLabel: label,
+        verdictReason: reason,
         is_sample: tc.is_sample,
         stdout: r.stdout,
         stderr: r.stderr,
@@ -316,10 +382,16 @@ async function runTestCases(language, code, testCases) {
     }
 
     const passedCount = results.filter((r) => r.passed).length;
-    return { results, passedCount, totalCount: testCases.length, compileError: null };
+    return {
+      results,
+      passedCount,
+      totalCount: testCases.length,
+      compileError: null,
+      verdict: summarize(results, null),
+    };
   } finally {
     await cleanup(workDir);
   }
 }
 
-module.exports = { executeCode, runTestCases, LANGUAGE_CONFIG };
+module.exports = { executeCode, runTestCases, LANGUAGE_CONFIG, LANGUAGE_RESOURCES };

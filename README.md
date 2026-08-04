@@ -1,10 +1,10 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.0.6**
+**Version 0.0.7**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
-JavaScript, and C code directly in the browser, and teachers create problems/exams, grade
+JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
 automatically, and track progress through analytics dashboards. Grading runs on a Redis-backed
 job queue with horizontally-scalable workers and real-time WebSocket results, and
 academic-integrity tooling (code-similarity screening and exam-session monitoring) is layered
@@ -60,7 +60,7 @@ Problems and exams belong to a course, and you only ever see the courses you are
 | Requested feature | Implementation |
 |---|---|
 | Real-time code writing/compiling/testing in the browser | Monaco editor + `/api/submissions/execute` |
-| Multi-language support | `codeExecution.service.js` — Python, C++, Java, JavaScript, and C, all tested live |
+| Multi-language support | `codeExecution.service.js` — Python, C++, Java, JavaScript, C and Go, all tested live |
 | Instant evaluation via automated test cases | Redis/BullMQ grading queue → `runTestCases()` → WebSocket push |
 | Teacher: user management | `/api/users/students` + Students page |
 | Teacher: exam creation | `/api/exams` + exam creation form |
@@ -71,6 +71,7 @@ Problems and exams belong to a course, and you only ever see the courses you are
 | Safe execution of untrusted code | Per-run Docker containers: no network, read-only rootfs, memory/CPU/pid limits, unprivileged uid |
 | Per-class separation of students and content | Courses + enrolment: students see only the courses they joined, teachers only the ones they own |
 | Exam integrity and fairness | Randomised per-student problem pools, tab/paste/fullscreen monitoring, per-student time extensions, teacher grade overrides |
+| Grading that doesn't punish formatting | Per-problem output checkers (float tolerance, unordered, regex) and classified verdicts explaining each failure |
 
 ## Scope and limitations of this release
 
@@ -99,6 +100,11 @@ extensions, teacher grade overrides, autosaved drafts and fullscreen-exit monito
 fixed a bug present since v0.0.1 - every timestamp was stored without a time zone, so exam
 windows were off by the server's UTC offset (invisible on a UTC host, three hours wrong on a
 Turkish one).
+
+v0.0.7 deepened grading itself. Output is judged by a per-problem checker rather than one string
+comparison, so a correct answer is no longer failed for float formatting or for listing a set in a
+different order, and a failure now says whether it was a wrong answer, a timeout, an out-of-memory
+or a crash. Go joins as a sixth language.
 
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants

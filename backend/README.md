@@ -1,13 +1,13 @@
 # CodeCloud - Backend
 
-**Version 0.0.6**
+**Version 0.0.7**
 
 Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam System.
 
 ## Features
 
 - JWT-based authentication, role-based authorization (student / teacher)
-- Sandboxed execution engine that compiles and runs **Python, C++, Java, JavaScript, and C**
+- Sandboxed execution engine that compiles and runs **Python, C++, Java, JavaScript, C and Go**
   (timeouts and memory limits per run)
 - Problem (exercise) management with visible/hidden test cases
 - "Run" (synchronous, free-form stdin) and "Submit" (queued, automatic grading) endpoints
@@ -29,6 +29,9 @@ Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam
 - **Exam experience (new in 0.0.6):** randomised per-student problem pools, per-student time
   extensions, teacher grade overrides, autosaved drafts and fullscreen-exit monitoring - see
   "Sitting an exam" below
+- **Evaluation depth (new in 0.0.7):** output checkers (float tolerance, unordered, regex,
+  case-insensitive), classified verdicts with a readable reason, and per-problem limits - see
+  "How answers are judged" below
 
 ## Setup
 
@@ -62,7 +65,7 @@ Submitted code runs inside per-language containers, so build those images once p
 runs a grading worker:
 
 ```bash
-npm run sandbox:build     # builds all five (a few GB of base images the first time)
+npm run sandbox:build     # builds all six (a few GB of base images the first time)
 npm run sandbox:check     # confirms each image's toolchain runs as the unprivileged user
 npm run sandbox:verify    # runs hostile submissions and fails if any escapes containment
 ```
@@ -149,8 +152,9 @@ submitted code runs directly on it:
 | Java     | JDK (`javac` + `java`, version 17+)    |
 | JavaScript | `node` (already required to run the app itself) |
 | C        | `gcc` (with C17 support)               |
+| Go       | `go` (1.21+)                           |
 
-Ubuntu/Debian: `apt install python3 g++ gcc openjdk-21-jdk-headless redis-server`
+Ubuntu/Debian: `apt install python3 g++ gcc openjdk-21-jdk-headless golang-go redis-server`
 
 It also needs GNU coreutils' `timeout`, which enforces the per-run wall clock. That is present
 on Linux but **not on macOS**, so `SANDBOX_MODE=host` does not work on a Mac out of the box —
@@ -228,6 +232,53 @@ Before v0.0.5 none of this existed: every authenticated user could read every pr
 student on the server, and any teacher could edit or delete any other teacher's content.
 Upgrading is lossless - `004_courses.sql` moves existing content into one "General" course and
 enrols every existing user in it, so an upgraded installation behaves exactly as it did before.
+
+## How answers are judged
+
+Grading asks two separate questions: did the program **run** successfully, and is its **output**
+correct? Conflating them is what made every failure look identical before v0.0.7.
+
+### Checkers
+
+A checker is chosen per problem. `exact` is the default and is what every problem used before
+v0.0.7, so nothing changes for existing content.
+
+| Checker | Accepts | Use it when |
+|---|---|---|
+| `exact` | identical output, after trailing-whitespace normalisation | the answer is a single exact string |
+| `case_insensitive` | any capitalisation | `YES`/`Yes` are both fine |
+| `float` | numbers within `checker_config.tolerance` (default 1e-6) | the answer involves decimals |
+| `unordered_lines` | the same lines in any order | the answer is a set of lines |
+| `unordered_tokens` | the same values in any order, ignoring line breaks | the answer is a set of values |
+| `regex` | output matching the pattern in full | several answers are acceptable |
+
+`float` compares by absolute *or* relative tolerance, because neither alone works across scales:
+1e-6 absolute is meaningless at 1e12, and 1e-6 relative is meaningless near zero. Non-numeric
+tokens in the expected output are compared literally, so a problem can mix labels and numbers
+("area: 3.14"). `regex` anchors the pattern to the whole output - printing the right answer
+surrounded by noise is not a correct answer.
+
+### Verdicts
+
+| Verdict | Meaning |
+|---|---|
+| `accepted` | ran cleanly and the output checked out |
+| `wrong_answer` | ran cleanly, output didn't check out |
+| `time_limit_exceeded` | the wall clock ran out |
+| `memory_limit_exceeded` | OOM-killed by the container, or the runtime reported it |
+| `runtime_error` | non-zero exit, with the signal explained where possible |
+| `compile_error` | never got as far as running |
+| `output_limit_exceeded` | printed far more than expected - usually a runaway loop |
+
+Verdicts are shown for hidden test cases as well as sample ones: a verdict describes how the run
+ended, never what the expected output was.
+
+### Limits
+
+`time_limit_sec` and `memory_limit_mb` on a problem override the server defaults for that problem
+only. Compiling has its own, larger budget (`EXEC_COMPILE_TIME_LIMIT_SEC`, default 30s) - a
+heavily-templated C++ file can legitimately take longer to compile than the problem's whole run
+budget.
 
 ## Sitting an exam
 

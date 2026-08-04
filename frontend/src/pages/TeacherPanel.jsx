@@ -33,6 +33,9 @@ const EMPTY_PROBLEM = {
   starter_code_java: '',
   starter_code_javascript: '',
   starter_code_c: '',
+  starter_code_go: '',
+  checker: 'exact',
+  checker_config: {},
   testCases: [{ input: '', expected_output: '', is_sample: true }],
 };
 
@@ -153,6 +156,58 @@ function ProblemForm({ onCreated, courses }) {
             className="w-full mt-1 px-3 py-2 rounded-card border border-line font-mono text-xs focus:border-primary outline-none"
           />
         </div>
+        <div>
+          <label className="text-xs text-inkmuted uppercase tracking-wide">Go starter code</label>
+          <textarea
+            value={form.starter_code_go}
+            onChange={(e) => setForm({ ...form, starter_code_go: e.target.value })}
+            rows={3}
+            className="w-full mt-1 px-3 py-2 rounded-card border border-line font-mono text-xs focus:border-primary outline-none"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs text-inkmuted uppercase tracking-wide mb-1.5 block">
+          How should the output be judged?
+        </label>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <select
+            value={form.checker}
+            onChange={(e) => setForm({ ...form, checker: e.target.value, checker_config: {} })}
+            className="px-3 py-2 rounded-card border border-line focus:border-primary outline-none"
+          >
+            <option value="exact">Exact match</option>
+            <option value="case_insensitive">Ignore capitalisation</option>
+            <option value="float">Numbers, within a tolerance</option>
+            <option value="unordered_lines">Same lines, any order</option>
+            <option value="unordered_tokens">Same values, any order</option>
+            <option value="regex">Matches a pattern</option>
+          </select>
+          {form.checker === 'float' && (
+            <input
+              type="number"
+              step="any"
+              placeholder="Tolerance (default 0.000001)"
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  checker_config: e.target.value ? { tolerance: Number(e.target.value) } : {},
+                })
+              }
+              className="px-3 py-2 rounded-card border border-line focus:border-primary outline-none"
+            />
+          )}
+        </div>
+        <p className="text-xs text-inkmuted mt-1.5">
+          {form.checker === 'exact'
+            ? 'Output must match character for character. Pick another option if the answer involves decimals or has no fixed order.'
+            : form.checker === 'float'
+              ? 'Numbers are compared numerically, so 0.30000000000000004 counts as 0.3.'
+              : form.checker === 'regex'
+                ? 'The expected output of each test case is treated as a regular expression the whole output must match.'
+                : 'Whitespace and ordering differences are ignored where the option says so.'}
+        </p>
       </div>
 
       <div>
