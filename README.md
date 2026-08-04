@@ -1,7 +1,7 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.0.8**
+**Version 0.0.9**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
@@ -15,7 +15,22 @@ on top.
 - **`backend/`** — Node.js/Express API, PostgreSQL, multi-language code execution engine. See `backend/README.md`.
 - **`frontend/`** — React (Vite) interface, Monaco code editor. See `frontend/README.md`.
 
-## Quick Start
+## Deploy it
+
+```bash
+cp .env.production.example .env    # fill in JWT_SECRET and DB_PASSWORD
+docker compose up -d
+docker compose run --rm api npm run migrate
+
+# grading workers run on the host - see backend/README.md for why
+cd backend && npm ci && npm run sandbox:build
+DB_HOST=127.0.0.1 REDIS_HOST=127.0.0.1 SANDBOX_MODE=docker npm run worker:pool
+```
+
+Backups: `./scripts/backup.sh`. Restore: `./scripts/restore.sh <file>`.
+Full deployment, TLS and upgrade notes are in `backend/README.md`.
+
+## Develop it
 
 ```bash
 # 1) Database (fresh install) - PostgreSQL 12+
@@ -112,6 +127,13 @@ a supervisor that sizes the worker pool to the backlog (measured growing 1 → 6
 simultaneous submissions), and a load test that exercises the real pipeline rather than a mock. It
 also added a cross-semester plagiarism archive, so this term's work can be screened against
 previous cohorts and not only against classmates.
+
+v0.0.9 made it deployable: a compose stack that brings up Postgres, Redis, the API and nginx in
+one command, production images for the app itself, verified backup and restore, and an upgrade
+procedure. Fixing it along the way: the documented first-deploy command didn't work, because the
+numbered migrations describe changes *since* the first release and there was nothing for them to
+build on — `npm run migrate` now creates the schema on an empty database and refuses to touch one
+that holds data.
 
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants

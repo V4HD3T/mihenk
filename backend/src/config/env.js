@@ -37,6 +37,12 @@ const schema = z.object({
   EXEC_COMPILE_TIME_LIMIT_SEC: numeric(30),
   EXEC_MEMORY_LIMIT_KB: numeric(524288),
   EXEC_MAX_OUTPUT_CHARS: numeric(100000),
+  // Where per-run work directories are created. Must be left at the default
+  // unless the worker itself runs in a container: the docker daemon resolves
+  // bind-mount paths on the HOST, so a containerised worker needs this to be a
+  // volume mounted at the identical path on both sides, or the sandbox silently
+  // receives an empty directory.
+  EXEC_WORK_DIR: z.string().optional(),
 
   // How submitted code is isolated:
   //   docker - every run happens in a throwaway, network-disconnected container

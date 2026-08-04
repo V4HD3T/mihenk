@@ -1,6 +1,6 @@
 # CodeCloud - Backend
 
-**Version 0.0.8**
+**Version 0.0.9**
 
 Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam System.
 
@@ -34,6 +34,8 @@ Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam
   "How answers are judged" below
 - **Scale and observability (new in 0.0.8):** Prometheus metrics, an autoscaling worker pool and
   a cross-semester plagiarism archive - see "Running at scale" below
+- **Deployable (new in 0.0.9):** a compose stack, production images, nginx, backup/restore and an
+  upgrade procedure - see "Deployment" below
 
 ## Setup
 
@@ -240,6 +242,86 @@ Before v0.0.5 none of this existed: every authenticated user could read every pr
 student on the server, and any teacher could edit or delete any other teacher's content.
 Upgrading is lossless - `004_courses.sql` moves existing content into one "General" course and
 enrols every existing user in it, so an upgraded installation behaves exactly as it did before.
+
+## Deployment
+
+```bash
+cp .env.production.example .env     # fill in JWT_SECRET and DB_PASSWORD
+docker compose up -d
+docker compose run --rm api npm run migrate
+
+cd backend && npm ci && npm run sandbox:build
+DB_HOST=127.0.0.1 REDIS_HOST=127.0.0.1 SANDBOX_MODE=docker npm run worker:pool
+```
+
+That is a working install: nginx on `HTTP_PORT` serving the SPA and proxying the API and the
+WebSocket, Postgres and Redis on persistent volumes, and the grading workers on the host.
+
+`npm run migrate` is the single correct command for both a fresh install and an upgrade. On an
+empty database it creates the schema; on an existing one it applies only what is missing. It
+refuses to rebuild a database that holds data.
+
+### Why the workers run on the host
+
+A worker starts a container per test case, so a **containerised** worker needs the host's Docker
+socket — and mounting that socket gives the worker root-equivalent access to the host. Verified,
+not assumed: a container with the socket mounted can start a second container that bind-mounts `/`
+and read anything on the machine. Against a project whose entire point is sandboxing untrusted
+code, that is a poor trade, so the safe layout is the default.
+
+If you accept the risk, `docker compose --profile containerised-worker up -d` runs the worker in a
+container. Two things it must get right, both verified the hard way:
+
+- The Docker socket is mounted, with the escalation above.
+- `EXEC_WORK_DIR` must be a volume mounted at the **identical path** on host and container. The
+  daemon resolves bind-mount paths on the host, so a path that exists only inside the worker
+  produces an *empty* directory in the sandbox — every submission then fails with "file not
+  found", which looks like a bug in the grading engine rather than a mounting mistake.
+
+### TLS
+
+The compose stack speaks plain HTTP. Terminate TLS in front of it rather than inside:
+
+```yaml
+# .env
+HTTP_PORT=127.0.0.1:8080      # keep nginx off the public interface
+PUBLIC_ORIGIN=https://codecloud.example.edu
+```
+
+Then point Caddy, Traefik or host nginx + certbot at `127.0.0.1:8080`. `PUBLIC_ORIGIN` must match
+what users type, because it is also what WebSocket handshakes are validated against.
+
+### Backup and restore
+
+```bash
+./scripts/backup.sh                       # -> backups/codecloud-<timestamp>.sql.gz
+./scripts/restore.sh backups/<file>.sql.gz
+```
+
+The backup verifies its own output — a dump that is truncated or missing the schema is deleted
+rather than kept, because an unreadable backup is worse than no backup, and you find out at the
+worst possible moment. It keeps 30 by default (`BACKUP_KEEP`).
+
+Redis is deliberately **not** backed up: it holds the grading queue, which is transient. Restoring
+a stale queue would be worse than starting with an empty one — some submissions need resubmitting,
+which is recoverable; regrading against stale jobs is not.
+
+Stop the workers before restoring, or a grading result written mid-restore leaves the data
+inconsistent.
+
+### Upgrading
+
+```bash
+./scripts/backup.sh                        # always, before anything else
+git pull && docker compose build
+docker compose up -d
+docker compose run --rm api npm run migrate
+```
+
+Migrations are additive and the API tolerates a schema that is one step ahead, so the brief window
+where new containers meet an un-migrated database is safe. To roll back: `git checkout` the
+previous tag, rebuild, and restore the backup — migrations are not reversible, which is why the
+backup comes first.
 
 ## Running at scale
 

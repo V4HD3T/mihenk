@@ -2,6 +2,73 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.0.9] - Deployable
+
+Eight releases of features that could only run on a developer's laptop. This one
+makes the thing installable.
+
+### Added
+- **A compose stack**: `docker compose up -d` brings up Postgres, Redis, the API
+  and nginx serving the built SPA. Health checks, restart policies, persistent
+  volumes, and Postgres/Redis bound to loopback so the host's workers can reach
+  them and nothing else can.
+- **Production images for the application itself** - distinct from the sandbox
+  images, which only ever held language toolchains. Multi-stage, no dev
+  dependencies, unprivileged user, `tini` as init (the worker spawns a `docker`
+  process per test case, and their exited children otherwise accumulate).
+- **nginx** serving the SPA and proxying `/api` and `/ws` on one origin, so the
+  browser never makes a cross-origin request and the built assets carry no
+  hardcoded API hostname. `/metrics` is deliberately not proxied.
+- **Backup and restore** (`scripts/backup.sh`, `scripts/restore.sh`). The backup
+  verifies its own output and deletes a dump that is truncated or missing the
+  schema, because an unreadable backup is worse than none and you find out at
+  the worst moment. Restore requires typing the database name.
+- **Deployment, TLS, upgrade and rollback documentation**, including why the
+  grading workers run on the host by default.
+- `EXEC_WORK_DIR`, so a containerised worker can put its work directory
+  somewhere the host daemon resolves to the same place.
+
+### Fixed
+- **The documented first-deploy command didn't work.** `npm run migrate` on a
+  new database failed with `relation "users" does not exist`: the numbered
+  migrations describe changes *since* the first release, and there was no base
+  schema for them to build on. `migrate` now creates the schema on a genuinely
+  empty database, making it the single correct command for both a fresh install
+  and an upgrade. It detects emptiness strictly and **refuses to rebuild a
+  database that holds anything** - that path loads `schema.sql`, which drops
+  every table, so it is covered by tests that assert it does not fire.
+- Postgres and Redis were not reachable from the host, so the documented default
+  layout - workers on the host - could not have worked. They are now published
+  on 127.0.0.1 only.
+
+### Decided, with the cost written down
+A containerised worker needs the host's Docker socket, and mounting it grants
+root-equivalent access to the host: verified by starting a second container that
+bind-mounts `/` and reads arbitrary files. For a project whose purpose is
+sandboxing untrusted code, that is a poor trade, so **workers on the host are
+the default** and the containerised worker is an opt-in compose profile with the
+risk documented rather than hidden.
+
+The same experiment surfaced a second trap: the daemon resolves bind-mount paths
+on the *host*, so a containerised worker using its own temp directory hands the
+sandbox an **empty** directory - every submission then fails with "file not
+found", which reads like a broken grading engine rather than a mounting mistake.
+
+### Verified
+The whole stack was brought up from nothing and driven end to end through nginx:
+teacher registered, course and problem created, student enrolled with a join
+code, submission graded 3/3 in 1.0s by a host worker running real sandbox
+containers. Metrics confirmed unreachable through nginx and reachable inside the
+network. Backup taken, every user, course, problem and submission deleted, then
+restored - all of it came back and the app kept serving. 167 tests, including
+new ones covering the bootstrap path both ways.
+
+### Known limitations (tracked for future versions)
+- No TLS inside the stack; terminate it in front (documented)
+- Single-host only - no multi-node orchestration
+- No automated backup schedule; wire `backup.sh` into cron or a timer yourself
+- The frontend still has no tests (next release)
+
 ## [0.0.8] - Scale and Observability
 
 ### Added

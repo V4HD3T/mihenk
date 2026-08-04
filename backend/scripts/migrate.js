@@ -44,9 +44,47 @@ async function appliedSet(client) {
   return new Set(rows.map((r) => r.filename));
 }
 
+/**
+ * Is this database completely empty?
+ *
+ * Deliberately strict: `schema.sql` begins by dropping every table, so the
+ * bootstrap below must never fire against a database that holds anything. The
+ * check is "the `users` table does not exist", which is true only before any
+ * install has ever run - `users` is created by the base schema and by nothing
+ * else, and no migration can remove it.
+ */
+async function isEmptyDatabase(client) {
+  const { rows } = await client.query("SELECT to_regclass('public.users') AS users");
+  return rows[0].users === null;
+}
+
+/**
+ * Creates the schema on a brand-new database.
+ *
+ * The numbered migrations only describe changes *since* the first release;
+ * there is no 001, because the starting point is src/db/schema.sql. Running
+ * `migrate` against an empty database therefore used to fail on migration 002
+ * with "relation users does not exist" - which is exactly what a first
+ * deployment does, following the documented instructions.
+ *
+ * Loading the base schema here makes `npm run migrate` the single correct
+ * command for both a fresh install and an upgrade. schema.sql seeds
+ * schema_migrations with every shipped migration, so nothing is re-applied
+ * afterwards.
+ */
+async function bootstrapSchema(client) {
+  const schemaPath = path.join(__dirname, '..', 'src', 'db', 'schema.sql');
+  console.log('Empty database detected - creating the schema from src/db/schema.sql');
+  await client.query(fs.readFileSync(schemaPath, 'utf8'));
+  console.log('Schema created.');
+}
+
 async function run({ dryRun = false } = {}) {
   const client = await pool.connect();
   try {
+    if (!dryRun && (await isEmptyDatabase(client))) {
+      await bootstrapSchema(client);
+    }
     await ensureMigrationsTable(client);
     const applied = await appliedSet(client);
     const all = migrationFiles();

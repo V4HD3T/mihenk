@@ -241,7 +241,10 @@ function runSandboxed(command, workDir, stdin, { language, backend, limits = {} 
 async function prepareWorkDir(language, code) {
   const config = LANGUAGE_CONFIG[language];
   if (!config) throw new Error(`Unsupported language: ${language}`);
-  const workDir = path.join(os.tmpdir(), 'codecloud-exec', crypto.randomUUID());
+  const workDir = path.join(
+    env.EXEC_WORK_DIR || path.join(os.tmpdir(), 'codecloud-exec'),
+    crypto.randomUUID()
+  );
   await fs.mkdir(workDir, { recursive: true });
   await fs.writeFile(path.join(workDir, config.filename), code, 'utf-8');
   // The container runs as uid 10001, which is not the uid that owns this

@@ -1,0 +1,149 @@
+# CodeCloud - single-host deployment.
+#
+#   cp .env.production.example .env
+#   # fill in the secrets it tells you to
+#   docker compose up -d
+#   docker compose run --rm api npm run migrate
+#
+# Then run the grading workers on the host:
+#
+#   cd backend && npm ci && npm run sandbox:build
+#   DB_HOST=127.0.0.1 REDIS_HOST=127.0.0.1 SANDBOX_MODE=docker npm run worker:pool
+#
+# Postgres and Redis are published on 127.0.0.1 for exactly this - reachable
+# from the host, not from the network.
+#
+# WHY THE WORKERS ARE NOT IN HERE BY DEFAULT
+#
+# A worker starts a container per test case, so a containerised worker needs the
+# host's Docker socket. Mounting that socket gives the worker root-equivalent
+# access to the host - verified: a container with the socket can start a second
+# container that bind-mounts / and read anything on the machine. That is a poor
+# trade against the sandbox this project exists to provide, so the safe layout
+# is the default and the containerised worker is opt-in:
+#
+#   docker compose --profile containerised-worker up -d
+#
+# See "Deployment" in backend/README.md before choosing that.
+
+name: codecloud
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-codecloud}
+      POSTGRES_USER: ${DB_USER:-codecloud}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-codecloud} -d ${DB_NAME:-codecloud}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Bound to the loopback interface only. It has to be reachable from the
+    # host, because the default layout runs the grading workers there - but it
+    # must not be reachable from the network.
+    ports:
+      - '127.0.0.1:${DB_PORT_HOST:-5432}:5432'
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Persist the queue so a restart mid-exam doesn't lose queued submissions.
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Loopback only, for the same reason as Postgres above.
+    ports:
+      - '127.0.0.1:${REDIS_PORT_HOST:-6379}:6379'
+
+  api:
+    build:
+      context: ./backend
+    image: codecloud-api:${CODECLOUD_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-codecloud}
+      DB_USER: ${DB_USER:-codecloud}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      TEACHER_INVITE_CODE: ${TEACHER_INVITE_CODE:-}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # nginx serves the SPA and the API on one origin, so the browser never
+      # makes a cross-origin request. This still has to name the public origin,
+      # because it is also what the WebSocket handshake is checked against.
+      FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
+    expose:
+      - '4000'
+
+  web:
+    build:
+      context: ./frontend
+    image: codecloud-web:${CODECLOUD_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '${HTTP_PORT:-80}:80'
+    # For TLS, put this behind a terminating proxy (Caddy, Traefik, or nginx
+    # with certbot on the host) rather than managing certificates in here -
+    # see "TLS" in backend/README.md.
+
+  # Opt-in only. Read the note at the top of this file first.
+  worker:
+    profiles: ['containerised-worker']
+    build:
+      context: ./backend
+    image: codecloud-api:${CODECLOUD_VERSION:-latest}
+    restart: unless-stopped
+    command: ['node', 'src/workerPool.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-codecloud}
+      DB_USER: ${DB_USER:-codecloud}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SANDBOX_MODE: docker
+      # The docker daemon resolves bind-mount paths on the HOST. The work
+      # directory therefore has to mean the same thing on both sides, or every
+      # sandbox container receives an empty directory and every submission fails
+      # with "file not found" - verified.
+      EXEC_WORK_DIR: /var/lib/codecloud/exec
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/codecloud/exec:/var/lib/codecloud/exec
+
+volumes:
+  postgres-data:
+  redis-data:
