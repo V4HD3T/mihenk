@@ -24,6 +24,7 @@ const integrityRoutes = require('./routes/integrity.routes');
 const coursesRoutes = require('./routes/courses.routes');
 const draftsRoutes = require('./routes/drafts.routes');
 const logger = require('./logger');
+const metrics = require('./metrics');
 const { config } = require('./config/env');
 
 /**
@@ -31,6 +32,14 @@ const { config } = require('./config/env');
  *   Lets a test build an app with, say, a rate limit of 3 without mutating the
  *   process environment. Production callers pass nothing.
  */
+/**
+ * Things to refresh when a scrape arrives, rather than on a timer: gauges that
+ * describe current state (queue depth, pool usage) are cheap to read on demand
+ * and stale if polled on their own schedule. server.js registers these; tests
+ * and the app itself work fine without them.
+ */
+const metricsHooks = {};
+
 function createApp(envOverrides = {}) {
   const env = { ...config(), ...envOverrides };
   const app = express();
@@ -54,6 +63,7 @@ function createApp(envOverrides = {}) {
   );
 
   app.use(express.json({ limit: '1mb' }));
+  app.use(metrics.httpMiddleware);
 
   app.use(
     pinoHttp({
@@ -93,6 +103,27 @@ function createApp(envOverrides = {}) {
     res.json({ status: 'ok', service: 'codecloud-backend', time: new Date().toISOString() });
   });
 
+  // Prometheus scrape endpoint.
+  //
+  // Queue depth, failure rates and host statistics are operational detail, not
+  // public information, so this is gated on a bearer token. With no token
+  // configured the endpoint is disabled outright rather than served openly -
+  // the same fail-closed choice as the sandbox mode.
+  app.get('/metrics', async (req, res) => {
+    if (!env.METRICS_TOKEN) return res.status(404).json({ error: 'Endpoint not found' });
+    const provided = (req.headers.authorization || '').replace(/^Bearer /, '');
+    if (provided !== env.METRICS_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+      if (metricsHooks.beforeScrape) await metricsHooks.beforeScrape();
+      res.set('Content-Type', metrics.register.contentType);
+      res.end(await metrics.register.metrics());
+    } catch (err) {
+      logger.error({ err }, 'Metrics scrape failed');
+      res.status(500).end();
+    }
+  });
+
   app.use('/api', globalLimiter);
   app.use('/api/auth/login', authLimiter);
   app.use('/api/auth/register', authLimiter);
@@ -122,4 +153,4 @@ function createApp(envOverrides = {}) {
   return app;
 }
 
-module.exports = { createApp };
+module.exports = { createApp, metricsHooks };

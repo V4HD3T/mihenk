@@ -11,14 +11,25 @@ const jwt = require('jsonwebtoken');
 const { WebSocketServer } = require('ws');
 const { QueueEvents } = require('bullmq');
 
-const { createApp } = require('./app');
+const { createApp, metricsHooks } = require('./app');
 const createConnection = require('./queue/redis');
 const wsHub = require('./ws/hub');
 const logger = require('./logger');
+const metrics = require('./metrics');
+const pool = require('./config/db');
+const gradingQueue = require('./queue/gradingQueue');
 const { config } = require('./config/env');
 
 const env = config();
+metrics.init('api');
 const app = createApp();
+
+// Queue depth and pool usage are read when a scrape arrives rather than on a
+// timer of their own, so the numbers are current and cost nothing in between.
+metricsHooks.beforeScrape = async () => {
+  await metrics.collectQueueDepth(gradingQueue);
+  metrics.collectDbPool(pool);
+};
 const server = http.createServer(app);
 
 // The API and the WebSocket server share one HTTP server/port.

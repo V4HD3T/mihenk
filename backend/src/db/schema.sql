@@ -20,6 +20,7 @@
 
 DROP TABLE IF EXISTS schema_migrations CASCADE;
 DROP TABLE IF EXISTS integrity_events CASCADE;
+DROP TABLE IF EXISTS archived_submissions CASCADE;
 DROP TABLE IF EXISTS submission_drafts CASCADE;
 DROP TABLE IF EXISTS exam_grade_overrides CASCADE;
 DROP TABLE IF EXISTS exam_accommodations CASCADE;
@@ -198,6 +199,22 @@ CREATE TABLE submission_drafts (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Submissions kept for plagiarism screening after their course is over, so this
+-- term's work can be checked against previous terms and not only against
+-- classmates. The code is copied rather than referenced so it survives the
+-- original course being deleted; it belongs to the teacher who archived it.
+CREATE TABLE archived_submissions (
+  id SERIAL PRIMARY KEY,
+  source_label VARCHAR(200) NOT NULL,
+  problem_title VARCHAR(200) NOT NULL,
+  student_label VARCHAR(200) NOT NULL DEFAULT '',
+  language language_type NOT NULL,
+  code TEXT NOT NULL,
+  fingerprints JSONB NOT NULL,
+  owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Academic-integrity signals captured during an active exam (tab-switches, pastes, ...)
 CREATE TABLE integrity_events (
   id SERIAL PRIMARY KEY,
@@ -222,6 +239,9 @@ CREATE INDEX idx_enrollments_user ON enrollments(user_id);
 CREATE INDEX idx_courses_created_by ON courses(created_by);
 CREATE INDEX idx_exam_assignments_user ON exam_assignments(exam_id, user_id);
 CREATE INDEX idx_grade_overrides_exam ON exam_grade_overrides(exam_id);
+CREATE INDEX idx_archived_owner ON archived_submissions(owner_id);
+CREATE INDEX idx_archived_problem_title ON archived_submissions(problem_title);
+CREATE INDEX idx_archived_language ON archived_submissions(language);
 -- COALESCE keeps practice drafts (exam_id IS NULL) distinct from exam drafts
 -- without needing a sentinel value, and gives ON CONFLICT something to target.
 CREATE UNIQUE INDEX idx_drafts_unique
@@ -242,4 +262,5 @@ INSERT INTO schema_migrations (filename) VALUES
   ('004_courses.sql'),
   ('005_exam_experience.sql'),
   ('006_timestamptz.sql'),
-  ('007_evaluation.sql');
+  ('007_evaluation.sql'),
+  ('008_similarity_archive.sql');

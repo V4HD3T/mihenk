@@ -1,7 +1,7 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.0.7**
+**Version 0.0.8**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
@@ -72,6 +72,7 @@ Problems and exams belong to a course, and you only ever see the courses you are
 | Per-class separation of students and content | Courses + enrolment: students see only the courses they joined, teachers only the ones they own |
 | Exam integrity and fairness | Randomised per-student problem pools, tab/paste/fullscreen monitoring, per-student time extensions, teacher grade overrides |
 | Grading that doesn't punish formatting | Per-problem output checkers (float tolerance, unordered, regex) and classified verdicts explaining each failure |
+| Absorbing an exam-day rush | Autoscaling worker pool sized to the queue, with Prometheus metrics; measured at 60 simultaneous submissions graded in 17s on one laptop |
 
 ## Scope and limitations of this release
 
@@ -105,6 +106,12 @@ v0.0.7 deepened grading itself. Output is judged by a per-problem checker rather
 comparison, so a correct answer is no longer failed for float formatting or for listing a set in a
 different order, and a failure now says whether it was a wrong answer, a timeout, an out-of-memory
 or a crash. Go joins as a sixth language.
+
+v0.0.8 made the system observable and elastic: Prometheus metrics from the API and every worker,
+a supervisor that sizes the worker pool to the backlog (measured growing 1 → 6 workers under 60
+simultaneous submissions), and a load test that exercises the real pipeline rather than a mock. It
+also added a cross-semester plagiarism archive, so this term's work can be screened against
+previous cohorts and not only against classmates.
 
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants

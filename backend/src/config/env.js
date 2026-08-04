@@ -55,6 +55,17 @@ const schema = z.object({
   REDIS_HOST: z.string().min(1).default('localhost'),
   REDIS_PORT: numeric(6379),
   WORKER_CONCURRENCY: numeric(4),
+
+  // Autoscaling pool (npm run worker:pool). The default shape suits one
+  // machine: idle at 1 worker, up to 8 during an exam rush.
+  WORKER_POOL_MIN: numeric(1),
+  WORKER_POOL_MAX: numeric(8),
+  // Queued+active jobs one worker is expected to absorb before another is added.
+  WORKER_POOL_BACKLOG_PER_WORKER: numeric(10),
+  WORKER_POOL_INTERVAL_MS: numeric(5000),
+  // Consecutive quiet ticks before shrinking, so a lull between two waves of
+  // submissions doesn't cost the startup time of rebuilding the pool.
+  WORKER_POOL_SCALE_DOWN_TICKS: numeric(6),
   // How long POST /api/submissions waits for Redis to accept a grading job
   // before giving up. Without a bound, a Redis outage hangs the request.
   QUEUE_ENQUEUE_TIMEOUT_MS: numeric(5000),
@@ -69,6 +80,17 @@ const schema = z.object({
   EXEC_RATE_LIMIT_MAX: numeric(30),
 
   LOG_LEVEL: z.string().optional(),
+
+  // GET /metrics is operational detail (queue depth, failure rates, host stats).
+  // Unset = the endpoint is disabled entirely rather than public by default.
+  METRICS_TOKEN: z.string().min(1).optional(),
+
+  // Connection pools. The default pg pool of 10 is the ceiling on concurrent
+  // requests that touch the database, so it needs to be at least as large as
+  // the worker concurrency it serves.
+  DB_POOL_MAX: numeric(20),
+  DB_IDLE_TIMEOUT_MS: numeric(30000),
+  DB_CONNECTION_TIMEOUT_MS: numeric(5000),
 });
 
 function loadEnv(source = process.env) {

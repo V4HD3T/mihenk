@@ -8,6 +8,7 @@ const session = require('../services/examSession.service');
 const { executeCode } = require('../services/codeExecution.service');
 const { enqueueGrading } = require('../queue/gradingQueue');
 const logger = require('../logger');
+const metrics = require('../metrics');
 
 const router = express.Router();
 
@@ -95,6 +96,7 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
     } catch (err) {
       // The row exists but nothing will ever grade it, so don't leave it
       // sitting in 'queued' forever pretending otherwise.
+      metrics.enqueueFailuresTotal.inc();
       logger.error({ err, submissionId: submission.id }, 'Could not enqueue grading job');
       await pool
         .query("UPDATE submissions SET status = 'error' WHERE id = $1", [submission.id])
@@ -103,6 +105,8 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
         error: 'The grading service is unavailable right now. Your code was not lost - please submit again shortly.',
       });
     }
+
+    metrics.submissionsTotal.inc({ language });
 
     // 202 Accepted: grading has been queued, not completed yet. The client
     // should wait for a WebSocket "submission_result" push or poll GET /:id.

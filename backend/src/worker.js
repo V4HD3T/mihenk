@@ -20,11 +20,21 @@ const pool = require('./config/db');
 const { runTestCases } = require('./services/codeExecution.service');
 const logger = require('./logger');
 const { config } = require('./config/env');
+const metrics = require('./metrics');
 
 const CONCURRENCY = config().WORKER_CONCURRENCY;
 
+metrics.init(`worker-${process.pid}`);
+
 async function gradeSubmission(job) {
   const { submissionId } = job.data;
+  const startedAt = Date.now();
+
+  // How long this sat in the queue before anyone looked at it. During a rush
+  // this, not grading time, is what a student actually experiences.
+  if (job.timestamp) {
+    metrics.queueWaitDuration.observe((startedAt - job.timestamp) / 1000);
+  }
 
   await pool.query("UPDATE submissions SET status = 'running' WHERE id = $1", [submissionId]);
 
@@ -86,6 +96,15 @@ async function gradeSubmission(job) {
     ]
   );
 
+  metrics.gradingDuration.observe(
+    { language: submission.language },
+    (Date.now() - startedAt) / 1000
+  );
+  metrics.verdictsTotal.inc({
+    verdict: gradeResult.verdict || 'unknown',
+    language: submission.language,
+  });
+
   // This becomes the job's `returnvalue`, which the API process's QueueEvents
   // listener reads to know which user to push a WebSocket notification to.
   return {
@@ -109,6 +128,9 @@ worker.on('completed', (job) => {
   logger.info({ submissionId: job.data.submissionId }, 'graded submission');
 });
 worker.on('failed', async (job, err) => {
+  // A job that threw is an infrastructure failure - distinct from a submission
+  // that was graded and found wrong.
+  metrics.gradingFailuresTotal.inc();
   logger.error({ err, submissionId: job?.data?.submissionId }, 'grading job failed');
   if (job?.data?.submissionId) {
     await pool.query("UPDATE submissions SET status = 'error' WHERE id = $1", [job.data.submissionId]).catch(() => {});

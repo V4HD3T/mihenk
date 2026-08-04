@@ -122,6 +122,10 @@ const problemGrading = z.object({
   memory_limit_mb: z.coerce.number().int().min(64).max(2048).nullish(),
 });
 
+const archiveCourse = z.object({
+  source_label: z.string().trim().min(1).max(200).optional(),
+});
+
 const integrityEvent = z.object({
   exam_id: z.coerce.number().int().positive(),
   problem_id: z.coerce.number().int().positive().nullish(),
@@ -133,6 +137,7 @@ module.exports = {
   LANGUAGES,
   CHECKERS,
   problemGrading,
+  archiveCourse,
   idParam,
   register,
   login,

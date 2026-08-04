@@ -67,7 +67,14 @@ function keywordSetFor(language) {
 // Two tokenizer patterns: Python's "#" comments vs C-style "//" and "/* */".
 // String/char literals and comments are recognized here so they can be
 // normalized/dropped instead of leaking their raw content into the token stream.
-const PYTHON_TOKEN_REGEX = /#[^\n]*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|==|!=|<=|>=|\*\*|\/\/|[A-Za-z_][A-Za-z0-9_]*|\d+\.?\d*|[^\s]/g;
+// Triple-quoted strings must come FIRST: regex alternation is ordered, so
+// without them a docstring was read as an empty string, then its prose as
+// ordinary code, then another empty string. A six-line docstring injected about
+// twenty fake identifier and punctuation tokens into the fingerprint that way -
+// enough to manufacture similarity between two students who both document their
+// work, and enough for a student to dilute a real match by padding with prose.
+const PYTHON_TOKEN_REGEX =
+  /#[^\n]*|"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|==|!=|<=|>=|\*\*|\/\/|[A-Za-z_][A-Za-z0-9_]*|\d+\.?\d*|[^\s]/g;
 const C_STYLE_TOKEN_REGEX = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|==|!=|<=|>=|&&|\|\||->|::|\+\+|--|\+=|-=|\*=|\/=|%=|<<|>>|[A-Za-z_][A-Za-z0-9_]*|\d+\.?\d*|[^\s]/g;
 
 /**

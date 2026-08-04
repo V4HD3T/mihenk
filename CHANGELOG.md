@@ -2,6 +2,74 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.0.8] - Scale and Observability
+
+### Added
+- **Prometheus metrics** at `GET /metrics`, from both the API and each worker:
+  queue depth by state, grading duration, queue wait, verdict counts, HTTP
+  timings, database pool usage and the usual Node runtime statistics. Queue
+  depth and pool usage are read when a scrape arrives rather than on their own
+  timer, so the numbers are current. The endpoint is behind `METRICS_TOKEN`,
+  and with no token configured it is **disabled** rather than public.
+- **Autoscaling worker pool** (`npm run worker:pool`). A supervisor runs grading
+  workers and sizes the pool to the backlog: idle at `WORKER_POOL_MIN`, up to
+  `WORKER_POOL_MAX` during a rush. It grows immediately, because the backlog is
+  already waiting, and shrinks only after the queue has stayed quiet for several
+  ticks, so a lull between two waves doesn't cost a rebuild. A worker that dies
+  on its own is replaced. Workers on other machines are unaffected - this
+  manages its own host only.
+- **Cross-semester similarity archive.** A finished course's submissions can be
+  archived with their fingerprints, and a later cohort screened against them.
+  Until now screening only compared a student against their own classmates, so a
+  solution handed down from last year was invisible. The code is copied rather
+  than referenced, so the archive outlives the course; it belongs to the teacher
+  who created it and is never shared between teachers.
+- **A load test** (`npm run loadtest`) that drives the real API and waits for
+  real workers, so its numbers include queueing, container startup, compilation
+  and the database.
+- **Connection pool tuning**: `DB_POOL_MAX` (default raised from pg's 10 to 20),
+  idle and connection timeouts. The pool size is the real ceiling on concurrent
+  database work, and the default sat below the worker concurrency it serves.
+
+### Fixed
+- **A Python docstring was tokenized as code by the similarity engine.** Triple-
+  quoted strings weren't recognised, so a docstring was read as an empty string,
+  then its prose as ordinary identifiers, then another empty string - a six-line
+  docstring injected about twenty fake tokens into the fingerprint. That both
+  manufactured similarity between two students who documented their work and let
+  a real match be diluted by padding with prose. Listed as a known limitation
+  since v0.0.2.
+- **The archive screening would have produced false accusations.** The class
+  report scores a pair by `max(percentA, percentB)`, which is right there
+  because a uniformly high score on a trivial problem is cancelled by the
+  class-relative median. The archive has no such baseline, and `max` is badly
+  behaved across size differences: a one-line program whose whole fingerprint
+  sits inside a twelve-line solution scored 100%. Measured on exactly that case
+  - max 100%, min 14%, while a genuine renamed copy scores 94% either way - so
+  archive screening requires the shared part to be a large fraction of *both*
+  submissions, and ignores fingerprints too small to carry signal. The class
+  report is unchanged.
+
+### Measured
+A burst of 60 simultaneous submissions on one laptop (6 workers max, Python,
+three test cases each, every test in its own container):
+
+| | |
+|---|---|
+| accepted | mean 0.06s, p95 0.07s |
+| end to end | mean 12.4s, p50 13.6s, p95 16.5s |
+| throughput | 3.5 submissions/second, all 60 graded in 17s |
+| autoscaling | pool grew 1 → 6 workers on a backlog of 60 |
+
+The API absorbs the burst instantly; the time is grading, which is what the
+queue exists to smooth out.
+
+### Known limitations (tracked for future versions)
+- No Grafana dashboard shipped, only the metrics to build one from
+- The pool supervisor scales one host; scaling across machines is still manual
+- Archive screening compares whole submissions, not per-function fragments
+- No alerting rules provided
+
 ## [0.0.7] - Evaluation Engine
 
 Grading was a single string comparison. That marks plenty of correct answers

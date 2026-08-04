@@ -1,6 +1,6 @@
 # CodeCloud - Backend
 
-**Version 0.0.7**
+**Version 0.0.8**
 
 Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam System.
 
@@ -32,6 +32,8 @@ Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam
 - **Evaluation depth (new in 0.0.7):** output checkers (float tolerance, unordered, regex,
   case-insensitive), classified verdicts with a readable reason, and per-problem limits - see
   "How answers are judged" below
+- **Scale and observability (new in 0.0.8):** Prometheus metrics, an autoscaling worker pool and
+  a cross-semester plagiarism archive - see "Running at scale" below
 
 ## Setup
 
@@ -94,7 +96,8 @@ npm run worker           # grading worker, in a separate terminal
 
 Health check: `GET /api/health`. Run more than one `npm run worker` (same machine or different
 ones) to grade more submissions concurrently — they all pull from the same Redis queue, so no
-extra coordination is needed.
+extra coordination is needed. On a machine that should size itself to the load, run
+`npm run worker:pool` instead of `npm run worker` (see "Running at scale").
 
 Both processes shut down gracefully on `SIGINT`/`SIGTERM`: the API drains in-flight requests and
 the worker finishes the submissions it is currently grading, so a restart never strands a
@@ -195,6 +198,11 @@ toolchains directly, so they need the table above regardless of `SANDBOX_MODE`.
 | GET    | /api/integrity/compare/:idA/:idB    | Side-by-side comparison with highlighted matches | Teacher |
 | POST   | /api/integrity/events               | Log a tab-switch/paste event during an exam | Authenticated |
 | GET    | /api/integrity/exam/:id             | Per-student integrity summary for an exam   | Teacher |
+| POST   | /api/integrity/archive/course/:id   | Archive a finished course for future screening | Owning teacher |
+| GET    | /api/integrity/archive              | Cohorts you have archived                   | Teacher |
+| DELETE | /api/integrity/archive/:label       | Drop an archived cohort                     | Teacher |
+| GET    | /api/integrity/problem/:id/archive-matches | Screen a problem against the archive | Owning teacher |
+| GET    | /metrics                            | Prometheus metrics                          | METRICS_TOKEN |
 | GET    | /api/courses                        | Courses you teach or are enrolled in        | Authenticated |
 | POST   | /api/courses                        | Create a course                             | Teacher |
 | GET    | /api/courses/:id                    | Course detail (join code: owner only)       | Enrolled / owner |
@@ -232,6 +240,88 @@ Before v0.0.5 none of this existed: every authenticated user could read every pr
 student on the server, and any teacher could edit or delete any other teacher's content.
 Upgrading is lossless - `004_courses.sql` moves existing content into one "General" course and
 enrols every existing user in it, so an upgraded installation behaves exactly as it did before.
+
+## Running at scale
+
+### Metrics
+
+`GET /metrics` serves Prometheus text from the API and from each worker, each labelled with its
+own `role` so they don't overwrite each other's series.
+
+Worth watching during an exam:
+
+| Metric | Question it answers |
+|---|---|
+| `codecloud_queue_depth{state="waiting"}` | is the backlog growing faster than it drains? |
+| `codecloud_queue_wait_seconds` | how long is a student waiting before grading even starts? |
+| `codecloud_grading_duration_seconds` | how long does grading itself take, by language? |
+| `codecloud_verdicts_total` | a sudden spike in `runtime_error` usually means the problem, not the students |
+| `codecloud_grading_failures_total` | jobs that threw - an infrastructure problem, not a wrong answer |
+| `codecloud_enqueue_failures_total` | submissions that couldn't be queued at all, e.g. Redis down |
+| `codecloud_db_pool_connections{state="waiting"}` | requests queueing for a database connection |
+
+The endpoint requires `METRICS_TOKEN` as a bearer token. Leave the variable unset and the
+endpoint is **disabled**, not public - queue depth and failure rates are operational detail.
+
+### Autoscaling workers
+
+```bash
+npm run worker:pool     # supervisor: sizes the pool to the backlog
+```
+
+A course sits idle for weeks, then two hundred students submit within ten minutes. Running enough
+workers for the exam wastes the machine the rest of the term; running enough for the quiet weeks
+means the exam queue takes far too long to drain.
+
+The supervisor forks the same `src/worker.js` you would start by hand — nothing about grading
+changes, only how many workers exist. It grows immediately (the backlog is already waiting) and
+shrinks only after `WORKER_POOL_SCALE_DOWN_TICKS` quiet intervals, so a lull between two waves of
+submissions doesn't cost the startup time of rebuilding the pool. A worker that dies on its own is
+replaced. Workers on *other* machines pull from the same Redis queue and are unaffected; this
+supervisor manages its own host only.
+
+Tune with `WORKER_POOL_MIN`, `WORKER_POOL_MAX` and `WORKER_POOL_BACKLOG_PER_WORKER`.
+
+### Load testing
+
+```bash
+npm run loadtest -- --students 100 --invite <TEACHER_INVITE_CODE>
+```
+
+Drives the real API and waits for real workers, so the numbers include queueing, container
+startup, compilation and the database. Point it at a test install: it creates throwaway accounts,
+and registering a class trips the production auth rate limit (which is the limiter working
+correctly - give the target install headroom for the run).
+
+Measured on one laptop, 60 simultaneous submissions, max 6 workers, Python with three test cases
+each: submissions accepted in 0.06s mean, graded end-to-end in 12.4s mean / 16.5s p95, throughput
+3.5/second, and the pool scaled 1 → 6 workers. The API absorbs the burst instantly; the elapsed
+time is grading, which is exactly what the queue exists to smooth out.
+
+## Cross-semester plagiarism archive
+
+The class report compares a student against their classmates. That never sees a solution handed
+down from last year's cohort, which is the most common way work gets reused in a course that runs
+every term.
+
+```
+POST   /api/integrity/archive/course/:id        keep a finished course's submissions
+GET    /api/integrity/archive                   what you have archived
+DELETE /api/integrity/archive/:label            drop a cohort
+GET    /api/integrity/problem/:id/archive-matches   screen this problem against the archive
+```
+
+The archive stores a copy of the code and its fingerprint, so it survives the original course
+being deleted. It belongs to the teacher who created it and is never shared between teachers.
+
+**Scoring is deliberately stricter here than in the class report.** The class report scores a pair
+by `max(percentA, percentB)`, which is right there because a uniformly high score on a trivial
+problem is cancelled out by the class-relative median. The archive has no such baseline, and `max`
+misbehaves when two submissions differ in size: a one-line program whose entire fingerprint sits
+inside a twelve-line solution scores 100%. Measured on exactly that case — max 100%, min 14%,
+while a genuine renamed copy of the same solution scores 94% either way. So archive screening
+requires the shared part to be a large fraction of **both** submissions, and ignores fingerprints
+too small to carry any signal. A false accusation costs far more than a missed match.
 
 ## How answers are judged
 
