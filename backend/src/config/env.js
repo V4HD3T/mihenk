@@ -52,6 +52,9 @@ const schema = z.object({
   REDIS_HOST: z.string().min(1).default('localhost'),
   REDIS_PORT: numeric(6379),
   WORKER_CONCURRENCY: numeric(4),
+  // How long POST /api/submissions waits for Redis to accept a grading job
+  // before giving up. Without a bound, a Redis outage hangs the request.
+  QUEUE_ENQUEUE_TIMEOUT_MS: numeric(5000),
 
   // Comma-separated list of allowed browser origins. No wildcard default:
   // an unset value means "localhost dev only", never "any site on the web".

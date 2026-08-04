@@ -29,16 +29,41 @@ export default function ProblemSolve() {
   const [submitResult, setSubmitResult] = useState(null);
   const [submitPhase, setSubmitPhase] = useState('idle'); // idle | queued | grading | done
   const [error, setError] = useState('');
+  const [draftSavedAt, setDraftSavedAt] = useState(null);
+  const [restoredDraft, setRestoredDraft] = useState(false);
   const pendingSubmissionId = useRef(null);
   const pollIntervalRef = useRef(null);
 
   useEffect(() => {
-    api.get(`/problems/${id}`).then(({ data }) => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await api.get(`/problems/${id}`);
+      if (cancelled) return;
       setProblem(data.problem);
       setTestCases(data.testCases);
+
+      // An autosaved draft wins over the starter code - it's the student's own
+      // unsubmitted work, and losing it to a refresh is what drafts prevent.
+      try {
+        const { data: draftData } = await api.get('/drafts', {
+          params: { problem_id: Number(id), ...(examId ? { exam_id: Number(examId) } : {}) },
+        });
+        if (cancelled) return;
+        if (draftData.draft) {
+          setCode(draftData.draft.code);
+          setLanguage(draftData.draft.language);
+          setRestoredDraft(true);
+          return;
+        }
+      } catch {
+        /* no draft, or drafts unavailable - fall through to starter code */
+      }
       setCode(data.problem.starter_code_python || '');
-    });
-  }, [id]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, examId]);
 
   // Academic-integrity monitoring: only active in exam mode, and only for the
   // duration of this page. Practice-mode problem solving is never monitored.
@@ -52,9 +77,43 @@ export default function ProblemSolve() {
     const handleVisibility = () => {
       if (document.hidden) logEvent('tab_hidden');
     };
+
+    // Leaving fullscreen during an exam is logged the same way as a tab switch:
+    // a signal for the teacher to look at, never an automatic block. Blocking
+    // client-side is trivial to bypass and would only be a false sense of
+    // security.
+    const handleFullscreen = () => {
+      if (!document.fullscreenElement) logEvent('fullscreen_exit');
+    };
+
     document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
+    document.addEventListener('fullscreenchange', handleFullscreen);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      document.removeEventListener('fullscreenchange', handleFullscreen);
+    };
   }, [examId, id]);
+
+  // Autosave, so a refresh or a dropped connection mid-exam doesn't lose
+  // everything written since the last submit. Debounced: this fires while the
+  // student types.
+  useEffect(() => {
+    if (!problem || code === '') return;
+    const timer = setTimeout(() => {
+      api
+        .put('/drafts', {
+          problem_id: Number(id),
+          exam_id: examId ? Number(examId) : null,
+          language,
+          code,
+        })
+        .then(({ data }) => setDraftSavedAt(data.updatedAt))
+        .catch(() => {
+          /* autosave is best-effort; never interrupt the student */
+        });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [code, language, id, examId, problem]);
 
   const handlePaste = (charCount) => {
     if (!examId) return;
@@ -132,6 +191,16 @@ export default function ProblemSolve() {
       });
       pendingSubmissionId.current = data.submission.id;
       setSubmitPhase('grading');
+      // The work is saved server-side now, so the draft has done its job.
+      api
+        .delete('/drafts', {
+          params: { problem_id: Number(id), ...(examId ? { exam_id: Number(examId) } : {}) },
+        })
+        .then(() => {
+          setDraftSavedAt(null);
+          setRestoredDraft(false);
+        })
+        .catch(() => {});
 
       // Polling fallback: if the WebSocket push hasn't resolved this within
       // a couple of seconds (or never connected at all), fall back to
@@ -169,7 +238,8 @@ export default function ProblemSolve() {
       )}
       {examId && (
         <div className="mb-4 text-xs text-inkmuted bg-ink/5 border border-line rounded-card px-4 py-2">
-          This is a timed exam. Tab switches and pasted code are logged for academic integrity.
+          This is a timed exam. Tab switches, leaving fullscreen and pasted code are logged for
+          academic integrity. Your work is saved automatically as you type.
         </div>
       )}
       <div className="grid lg:grid-cols-2 gap-6">
@@ -250,6 +320,14 @@ export default function ProblemSolve() {
               {submitPhase === 'queued' ? 'Queued…' : submitPhase === 'grading' ? 'Grading…' : 'Submit ✓'}
             </button>
           </div>
+
+          {(restoredDraft || draftSavedAt) && (
+            <p className="mt-2 text-xs text-inkmuted">
+              {restoredDraft && !draftSavedAt
+                ? 'Restored your unsubmitted work from last time.'
+                : `Draft saved ${new Date(draftSavedAt).toLocaleTimeString()}`}
+            </p>
+          )}
 
           {(submitPhase === 'queued' || submitPhase === 'grading') && (
             <div className="mt-4 text-sm text-inkmuted flex items-center gap-2">

@@ -22,6 +22,7 @@ const analyticsRoutes = require('./routes/analytics.routes');
 const usersRoutes = require('./routes/users.routes');
 const integrityRoutes = require('./routes/integrity.routes');
 const coursesRoutes = require('./routes/courses.routes');
+const draftsRoutes = require('./routes/drafts.routes');
 const logger = require('./logger');
 const { config } = require('./config/env');
 
@@ -105,6 +106,7 @@ function createApp(envOverrides = {}) {
   app.use('/api/users', usersRoutes);
   app.use('/api/integrity', integrityRoutes);
   app.use('/api/courses', coursesRoutes);
+  app.use('/api/drafts', draftsRoutes);
 
   app.use((req, res) => {
     res.status(404).json({ error: 'Endpoint not found' });

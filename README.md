@@ -1,7 +1,7 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.0.5**
+**Version 0.0.6**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, and C code directly in the browser, and teachers create problems/exams, grade
@@ -70,6 +70,7 @@ Problems and exams belong to a course, and you only ever see the courses you are
 | Cloud-native execution (scalable, matching the original "cloud computing" brief) | BullMQ/Redis queue + horizontally-scalable `npm run worker` processes |
 | Safe execution of untrusted code | Per-run Docker containers: no network, read-only rootfs, memory/CPU/pid limits, unprivileged uid |
 | Per-class separation of students and content | Courses + enrolment: students see only the courses they joined, teachers only the ones they own |
+| Exam integrity and fairness | Randomised per-student problem pools, tab/paste/fullscreen monitoring, per-student time extensions, teacher grade overrides |
 
 ## Scope and limitations of this release
 
@@ -92,6 +93,12 @@ v0.0.5 introduced courses. Problems and exams now belong to a course, and access
 enrolment: a student sees only their own courses, a teacher only the ones they created. Before
 this, every authenticated user could read every problem, exam and student on the server. The
 rules are covered by 21 integration tests against a real PostgreSQL, which CI runs on every push.
+
+v0.0.6 built out the exam itself: randomised per-student problem pools, accessibility time
+extensions, teacher grade overrides, autosaved drafts and fullscreen-exit monitoring. It also
+fixed a bug present since v0.0.1 - every timestamp was stored without a time zone, so exam
+windows were off by the server's UTC offset (invisible on a UTC host, three hours wrong on a
+Turkish one).
 
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants

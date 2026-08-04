@@ -45,7 +45,9 @@ describeDb('course isolation', () => {
 
     // Imported after applyEnv so the pool connects to the test database.
     const appModule = await import('../src/app.js');
-    app = appModule.default.createApp();
+    // These suites register many accounts; the production auth rate limit would
+    // otherwise reject the later ones and mask the real assertions.
+    app = appModule.default.createApp({ AUTH_RATE_LIMIT_MAX: 1000, RATE_LIMIT_MAX: 100000 });
 
     alice = await registerUser('Alice', 'alice@x.edu', 'test-invite-code');
     bob = await registerUser('Bob', 'bob@x.edu', 'test-invite-code');

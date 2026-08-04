@@ -2,6 +2,66 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.0.6] - Exam Experience
+
+### Fixed
+- **Exam windows were wrong by the server's UTC offset.** Present since v0.0.1.
+  Every instant was stored in a `TIMESTAMP` (without time zone) column: the API
+  writes ISO-8601 instants, PostgreSQL kept the UTC wall clock and discarded the
+  offset, and the driver read that value back as *local* time. The round trip
+  therefore shifted every timestamp by the app server's offset. On a UTC server
+  this is invisible, which is how it survived five releases; on a server at
+  UTC+3 an exam scheduled to end at 17:00 stopped accepting submissions at
+  14:00. `006_timestamptz.sql` converts every point-in-time column to
+  `TIMESTAMPTZ`, and a regression test asserts an exam reads back the exact
+  instant it was given.
+- **A Redis outage hung every submission request.** `POST /api/submissions`
+  awaited an enqueue that ioredis retries indefinitely while disconnected, so
+  the request never returned. Enqueueing is now bounded
+  (`QUEUE_ENQUEUE_TIMEOUT_MS`, default 5s); on failure the submission is marked
+  `error` rather than left claiming to be `queued`, and the caller gets a 503
+  telling them to retry.
+
+### Added
+- **Randomised per-student problem pools.** An exam can set
+  `problems_per_student`, and each student is dealt that many problems at
+  random from the exam's pool. The deal is stored, not re-derived, so it is
+  stable across reloads and devices, cannot change mid-exam if the problem list
+  is edited, and can be audited by the teacher
+  (`GET /api/exams/:id/assignments`). Submitting an answer to a problem you
+  weren't dealt is refused.
+- **Per-student time extensions** for accessibility accommodations
+  (`PUT /api/exams/:id/accommodations/:userId`). The student's effective
+  deadline is computed in one place and honoured everywhere the window is
+  checked - submitting, loading the exam, and integrity logging - so it cannot
+  be granted on one endpoint and ignored on another. The exam page counts down
+  against the student's own deadline.
+- **Teacher grade overrides** (`PUT/DELETE /api/exams/:id/grades/:userId/:problemId`).
+  Auto-grading compares stdout exactly, so it is unforgiving about a formatting
+  difference in an otherwise correct answer; this is the escape hatch. The
+  results table returns the final score, the automatic score and who changed it.
+- **Draft autosave.** In-progress code is saved as the student types and
+  restored on return, so a refresh, a dropped connection or a browser crash
+  mid-exam no longer loses everything since the last submit. Drafts are private
+  to their author, and exam drafts are kept separate from practice drafts for
+  the same problem.
+- **Fullscreen-exit detection** joins tab-switch and paste monitoring. Logged as
+  a signal for the teacher, never an automatic block.
+
+### Verified
+Against real PostgreSQL 16 and Redis 7: 26 new integration tests covering pool
+stability and per-student variation, accommodation grant/revoke, override
+precedence, draft isolation and the timezone regression - 91 tests total. The
+timezone regression test was itself checked by reverting the column type, which
+failed 6 tests. CI now runs a Redis service alongside Postgres so the submission
+happy path is genuinely exercised.
+
+### Known limitations (tracked for future versions)
+- No late-submission policy (an exam either accepts a submission or does not)
+- Overrides are per problem; no rubric or partial-credit breakdown within one
+- Fullscreen is monitored, not enforced - the exam page does not request it
+- No teaching-assistant role; a course still has exactly one owning teacher
+
 ## [0.0.5] - Courses and Enrollment
 
 Until now the system had no notion of a class: every authenticated user could

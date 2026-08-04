@@ -5,6 +5,7 @@ const { computeFingerprint, compareFingerprints, getMatchedSpans, computeClassRe
 const { validate } = require('../middleware/validate');
 const schemas = require('../validation/schemas');
 const access = require('../services/courseAccess.service');
+const session = require('../services/examSession.service');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -119,9 +120,11 @@ router.post('/events', requireAuth, validate({ body: schemas.integrityEvent }), 
       [exam_id, ...scope.params]
     );
     if (examResult.rows.length === 0) return res.status(404).json({ error: 'Exam not found' });
-    const exam = examResult.rows[0];
-    const now = new Date();
-    if (now < new Date(exam.start_time) || now > new Date(exam.end_time)) {
+
+    // Uses the student's effective window, so a student working in granted
+    // extra time is still monitored rather than silently unlogged.
+    const window = await session.isWindowOpen(exam_id, req.user.id);
+    if (!window.open) {
       // Outside the exam window: silently accept without logging, nothing to monitor.
       return res.status(204).end();
     }
@@ -148,12 +151,13 @@ router.get('/exam/:id', requireAuth, requireRole('teacher'), async (req, res) =>
       `SELECT u.id AS user_id, u.name, u.email,
               COUNT(*) FILTER (WHERE ie.event_type = 'tab_hidden') AS tab_hidden_count,
               COUNT(*) FILTER (WHERE ie.event_type = 'paste') AS paste_count,
+              COUNT(*) FILTER (WHERE ie.event_type = 'fullscreen_exit') AS fullscreen_exit_count,
               MAX(ie.occurred_at) AS last_event_at
        FROM integrity_events ie
        JOIN users u ON u.id = ie.user_id
        WHERE ie.exam_id = $1
        GROUP BY u.id, u.name, u.email
-       ORDER BY (COUNT(*) FILTER (WHERE ie.event_type = 'tab_hidden') + COUNT(*) FILTER (WHERE ie.event_type = 'paste')) DESC`,
+       ORDER BY COUNT(*) DESC`,
       [req.params.id]
     );
     res.json({ summary: result.rows });

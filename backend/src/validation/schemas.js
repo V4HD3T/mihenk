@@ -75,10 +75,46 @@ const courseUserParams = z.object({
   userId: z.coerce.number().int().positive(),
 });
 
+const examUserParams = z.object({
+  id: z.coerce.number().int().positive(),
+  userId: z.coerce.number().int().positive(),
+});
+
+const gradeParams = z.object({
+  id: z.coerce.number().int().positive(),
+  userId: z.coerce.number().int().positive(),
+  problemId: z.coerce.number().int().positive(),
+});
+
+const accommodation = z.object({
+  // 0 removes the accommodation. Capped at 24h so a typo can't leave an exam
+  // open indefinitely for one student.
+  extra_minutes: z.coerce.number().int().min(0).max(1440),
+  note: z.string().trim().max(500).optional().default(''),
+});
+
+const gradeOverride = z.object({
+  score: z.coerce.number().int().min(0),
+  max_score: z.coerce.number().int().positive(),
+  feedback: z.string().trim().max(2000).optional().default(''),
+});
+
+const saveDraft = z.object({
+  problem_id: z.coerce.number().int().positive(),
+  exam_id: z.coerce.number().int().positive().nullish(),
+  language,
+  code: z.string().max(100000),
+});
+
+const draftQuery = z.object({
+  problem_id: z.coerce.number().int().positive(),
+  exam_id: z.coerce.number().int().positive().optional(),
+});
+
 const integrityEvent = z.object({
   exam_id: z.coerce.number().int().positive(),
   problem_id: z.coerce.number().int().positive().nullish(),
-  event_type: z.enum(['tab_hidden', 'paste']),
+  event_type: z.enum(['tab_hidden', 'paste', 'fullscreen_exit']),
   detail: z.string().max(1000).nullish(),
 });
 
@@ -94,4 +130,10 @@ module.exports = {
   updateCourse,
   joinCourse,
   courseUserParams,
+  examUserParams,
+  gradeParams,
+  accommodation,
+  gradeOverride,
+  saveDraft,
+  draftQuery,
 };

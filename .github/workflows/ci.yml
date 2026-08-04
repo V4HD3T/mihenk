@@ -28,12 +28,25 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # The submission path enqueues a grading job, so the happy path needs a
+      # queue as well as a database.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       TEST_DB_HOST: localhost
       TEST_DB_PORT: 5432
       TEST_DB_NAME: codecloud_test
       TEST_DB_USER: postgres
       TEST_DB_PASSWORD: postgres
+      TEST_REDIS_HOST: localhost
+      TEST_REDIS_PORT: 6379
       # Refuse to let the isolation suite skip itself in CI: a green build with
       # skipped tests is exactly the false confidence they exist to prevent.
       REQUIRE_TEST_DB: '1'

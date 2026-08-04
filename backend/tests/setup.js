@@ -15,3 +15,10 @@ process.env.JWT_SECRET = 'test-secret-not-used-anywhere-real';
 process.env.LOG_LEVEL = 'silent';
 process.env.TEACHER_INVITE_CODE = 'test-invite-code';
 process.env.FRONTEND_ORIGIN = 'http://localhost:5173';
+
+// The integration suites exercise the real POST /api/submissions path, which
+// enqueues a grading job. TEST_REDIS_* points them at a throwaway Redis; when
+// none is running the enqueue fails fast (bounded by QUEUE_ENQUEUE_TIMEOUT_MS)
+// and those specific assertions fail rather than hanging the run.
+if (process.env.TEST_REDIS_HOST) process.env.REDIS_HOST = process.env.TEST_REDIS_HOST;
+if (process.env.TEST_REDIS_PORT) process.env.REDIS_PORT = process.env.TEST_REDIS_PORT;

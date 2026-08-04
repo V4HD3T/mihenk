@@ -4,8 +4,9 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const schemas = require('../validation/schemas');
 const access = require('../services/courseAccess.service');
+const session = require('../services/examSession.service');
 const { executeCode } = require('../services/codeExecution.service');
-const gradingQueue = require('../queue/gradingQueue');
+const { enqueueGrading } = require('../queue/gradingQueue');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -45,18 +46,32 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
       return res.status(404).json({ error: 'Problem not found' });
     }
 
-    // For exam submissions, validate the time window
+    // For exam submissions, validate the window and the student's own problem set
     if (exam_id) {
       const examScope = access.courseScope(req.user, 'x.course_id', 2);
       const examResult = await pool.query(
-        `SELECT x.* FROM exams x WHERE x.id = $1 AND ${examScope.sql}`,
+        `SELECT x.id FROM exams x WHERE x.id = $1 AND ${examScope.sql}`,
         [exam_id, ...examScope.params]
       );
       if (examResult.rows.length === 0) return res.status(404).json({ error: 'Exam not found' });
-      const exam = examResult.rows[0];
-      const now = new Date();
-      if (now < new Date(exam.start_time) || now > new Date(exam.end_time)) {
-        return res.status(403).json({ error: 'This exam is not currently active' });
+
+      // Uses the student's *effective* deadline, so a granted accommodation is
+      // honoured here and not only when the exam page loads.
+      const window = await session.isWindowOpen(exam_id, req.user.id);
+      if (!window.open) {
+        return res.status(403).json({
+          error:
+            window.reason === 'not_started'
+              ? 'This exam has not started yet'
+              : 'This exam is no longer accepting submissions',
+        });
+      }
+
+      // With a randomised pool, answering a problem you weren't dealt would
+      // otherwise be a way to see the whole pool.
+      const assigned = await session.assignedProblemIds(exam_id, req.user.id);
+      if (!assigned.includes(Number(problem_id))) {
+        return res.status(403).json({ error: 'This problem is not part of your exam' });
       }
     }
 
@@ -75,7 +90,19 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
     );
     const submission = insertResult.rows[0];
 
-    await gradingQueue.add('grade', { submissionId: submission.id });
+    try {
+      await enqueueGrading(submission.id);
+    } catch (err) {
+      // The row exists but nothing will ever grade it, so don't leave it
+      // sitting in 'queued' forever pretending otherwise.
+      logger.error({ err, submissionId: submission.id }, 'Could not enqueue grading job');
+      await pool
+        .query("UPDATE submissions SET status = 'error' WHERE id = $1", [submission.id])
+        .catch(() => {});
+      return res.status(503).json({
+        error: 'The grading service is unavailable right now. Your code was not lost - please submit again shortly.',
+      });
+    }
 
     // 202 Accepted: grading has been queued, not completed yet. The client
     // should wait for a WebSocket "submission_result" push or poll GET /:id.

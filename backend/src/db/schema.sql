@@ -1,6 +1,11 @@
 -- CodeCloud - Cloud-Based Coding Education and Exam System
 -- Database Schema (PostgreSQL 12+)
 --
+-- All point-in-time columns are TIMESTAMPTZ, not TIMESTAMP. The API writes
+-- ISO-8601 instants; a naive TIMESTAMP column discards the offset on write and
+-- is reinterpreted as local time on read, which shifted every instant by the
+-- server's UTC offset (see migrations/006_timestamptz.sql).
+--
 -- This file is the COMPLETE current-state schema for a FRESH install: it already
 -- contains everything the numbered files in ../../migrations/ add. Creating a
 -- database with this file and then running `npm run migrate` is a no-op, because
@@ -15,6 +20,10 @@
 
 DROP TABLE IF EXISTS schema_migrations CASCADE;
 DROP TABLE IF EXISTS integrity_events CASCADE;
+DROP TABLE IF EXISTS submission_drafts CASCADE;
+DROP TABLE IF EXISTS exam_grade_overrides CASCADE;
+DROP TABLE IF EXISTS exam_accommodations CASCADE;
+DROP TABLE IF EXISTS exam_assignments CASCADE;
 DROP TABLE IF EXISTS enrollments CASCADE;
 DROP TABLE IF EXISTS courses CASCADE;
 DROP TABLE IF EXISTS submissions CASCADE;
@@ -39,7 +48,7 @@ CREATE TABLE users (
   email VARCHAR(150) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   role user_role NOT NULL DEFAULT 'student',
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Courses (a class/section). Problems and exams belong to exactly one course,
@@ -52,14 +61,14 @@ CREATE TABLE courses (
   term VARCHAR(50) NOT NULL DEFAULT '',
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   archived BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Which students are in which course.
 CREATE TABLE enrollments (
   course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  enrolled_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  enrolled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (course_id, user_id)
 );
 
@@ -76,7 +85,7 @@ CREATE TABLE problems (
   starter_code_javascript TEXT NOT NULL DEFAULT '',
   starter_code_c TEXT NOT NULL DEFAULT '',
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Test cases for each problem (input / expected output)
@@ -96,10 +105,13 @@ CREATE TABLE exams (
   title VARCHAR(200) NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  start_time TIMESTAMP NOT NULL,
-  end_time TIMESTAMP NOT NULL,
+  start_time TIMESTAMPTZ NOT NULL,
+  end_time TIMESTAMPTZ NOT NULL,
   duration_minutes INTEGER NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  -- NULL = every student sees every problem. A number deals each student that
+  -- many problems at random from the exam's pool.
+  problems_per_student INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Exam <-> Problem relationship (an exam can contain multiple problems)
@@ -123,7 +135,54 @@ CREATE TABLE submissions (
   total_count INTEGER NOT NULL DEFAULT 0,
   execution_time_ms INTEGER NOT NULL DEFAULT 0,
   results_json JSONB,
-  submitted_at TIMESTAMP NOT NULL DEFAULT NOW()
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Which problems a student was actually dealt, when the exam randomises its pool.
+-- Stored rather than re-derived so the teacher can audit it and so it cannot
+-- change under a student mid-exam.
+CREATE TABLE exam_assignments (
+  exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  problem_id INTEGER NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+  assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (exam_id, user_id, problem_id)
+);
+
+-- Per-student extra time (accessibility accommodations).
+CREATE TABLE exam_accommodations (
+  exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  extra_minutes INTEGER NOT NULL DEFAULT 0,
+  note TEXT NOT NULL DEFAULT '',
+  granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (exam_id, user_id)
+);
+
+-- A teacher-set score that wins over the automatic one.
+CREATE TABLE exam_grade_overrides (
+  exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  problem_id INTEGER NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+  score INTEGER NOT NULL,
+  max_score INTEGER NOT NULL,
+  feedback TEXT NOT NULL DEFAULT '',
+  graded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  graded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (exam_id, user_id, problem_id)
+);
+
+-- In-progress code, saved as the student types, so a refresh or a dropped
+-- connection during an exam doesn't lose everything since the last submit.
+CREATE TABLE submission_drafts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  problem_id INTEGER NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+  exam_id INTEGER REFERENCES exams(id) ON DELETE CASCADE,
+  language language_type NOT NULL,
+  code TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Academic-integrity signals captured during an active exam (tab-switches, pastes, ...)
@@ -134,7 +193,7 @@ CREATE TABLE integrity_events (
   problem_id INTEGER REFERENCES problems(id) ON DELETE SET NULL,
   event_type VARCHAR(30) NOT NULL, -- 'tab_hidden' | 'paste'
   detail TEXT,
-  occurred_at TIMESTAMP NOT NULL DEFAULT NOW()
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_submissions_user ON submissions(user_id);
@@ -148,12 +207,18 @@ CREATE INDEX idx_problems_course ON problems(course_id);
 CREATE INDEX idx_exams_course ON exams(course_id);
 CREATE INDEX idx_enrollments_user ON enrollments(user_id);
 CREATE INDEX idx_courses_created_by ON courses(created_by);
+CREATE INDEX idx_exam_assignments_user ON exam_assignments(exam_id, user_id);
+CREATE INDEX idx_grade_overrides_exam ON exam_grade_overrides(exam_id);
+-- COALESCE keeps practice drafts (exam_id IS NULL) distinct from exam drafts
+-- without needing a sentinel value, and gives ON CONFLICT something to target.
+CREATE UNIQUE INDEX idx_drafts_unique
+  ON submission_drafts (user_id, problem_id, COALESCE(exam_id, 0));
 
 -- Which numbered migrations have been applied to this database. `npm run migrate`
 -- reads this table, applies whatever is missing, and records it here.
 CREATE TABLE schema_migrations (
   filename VARCHAR(255) PRIMARY KEY,
-  applied_at TIMESTAMP NOT NULL DEFAULT NOW()
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- A database created from this file already contains every shipped migration,
@@ -161,4 +226,6 @@ CREATE TABLE schema_migrations (
 INSERT INTO schema_migrations (filename) VALUES
   ('002_academic_integrity.sql'),
   ('003_cloud_execution.sql'),
-  ('004_courses.sql');
+  ('004_courses.sql'),
+  ('005_exam_experience.sql'),
+  ('006_timestamptz.sql');

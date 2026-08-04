@@ -8,28 +8,62 @@ function StudentExamView({ examId }) {
   const [exam, setExam] = useState(null);
   const [problems, setProblems] = useState([]);
   const [myProgress, setMyProgress] = useState([]);
+  // The server's answer for when *this* student's window closes - it includes
+  // any extra time they've been granted, which exam.end_time does not.
+  const [endsAt, setEndsAt] = useState(null);
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     api.get(`/exams/${examId}`).then(({ data }) => {
       setExam(data.exam);
       setProblems(data.problems);
       setMyProgress(data.myProgress);
+      setEndsAt(data.endsAt ? new Date(data.endsAt) : null);
     });
   }, [examId]);
 
+  // Drives the countdown.
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   if (!exam) return <p className="text-inkmuted">Loading…</p>;
 
-  const now = new Date();
-  const isActive = now >= new Date(exam.start_time) && now <= new Date(exam.end_time);
+  const deadline = endsAt || new Date(exam.end_time);
+  const isActive = now >= new Date(exam.start_time) && now <= deadline;
+  const hasExtraTime = endsAt && endsAt.getTime() > new Date(exam.end_time).getTime();
+  const msLeft = deadline - now;
+
+  const formatLeft = (ms) => {
+    if (ms <= 0) return '0:00';
+    const total = Math.floor(ms / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = total % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+      : `${m}:${String(sec).padStart(2, '0')}`;
+  };
 
   return (
     <div>
       <h1 className="font-display text-3xl font-semibold mb-2">{exam.title}</h1>
       <p className="text-inkmuted mb-1">{exam.description}</p>
-      <p className="text-sm font-mono text-inkmuted mb-8">
-        {new Date(exam.start_time).toLocaleString('en-US')} — {new Date(exam.end_time).toLocaleString('en-US')} ·{' '}
+      <p className="text-sm font-mono text-inkmuted mb-4">
+        {new Date(exam.start_time).toLocaleString('en-US')} — {deadline.toLocaleString('en-US')} ·{' '}
         {exam.duration_minutes} minutes
       </p>
+
+      {isActive && (
+        <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-card border border-line bg-surface">
+          <span className={`w-2 h-2 rounded-full ${msLeft < 5 * 60 * 1000 ? 'bg-error animate-pulse' : 'bg-primary'}`} />
+          <span className="font-mono text-sm">{formatLeft(msLeft)} left</span>
+          {hasExtraTime && (
+            <span className="text-xs text-inkmuted">· includes your extra time</span>
+          )}
+        </div>
+      )}
 
       {!isActive && (
         <div className="mb-6 text-sm px-4 py-2.5 rounded-card bg-warning-bg text-warning">
@@ -69,12 +103,16 @@ function StudentExamView({ examId }) {
 
 function IntegrityBadge({ summary }) {
   if (!summary) return <span className="text-inkmuted text-xs">—</span>;
-  const total = Number(summary.tab_hidden_count) + Number(summary.paste_count);
+  const total =
+    Number(summary.tab_hidden_count) +
+    Number(summary.paste_count) +
+    Number(summary.fullscreen_exit_count || 0);
   if (total === 0) return <span className="text-inkmuted text-xs">—</span>;
   const style = total >= 5 ? 'bg-error-bg text-error' : 'bg-warning-bg text-warning';
   return (
     <span className={`text-xs font-mono px-2 py-1 rounded-full whitespace-nowrap ${style}`}>
       ⚠ {summary.tab_hidden_count} tab · {summary.paste_count} paste
+      {Number(summary.fullscreen_exit_count || 0) > 0 && ` · ${summary.fullscreen_exit_count} fullscreen`}
     </span>
   );
 }
@@ -96,7 +134,7 @@ function TeacherExamResults({ examId }) {
     <div>
       <h1 className="font-display text-3xl font-semibold mb-1">Exam Results</h1>
       <p className="text-xs text-inkmuted mb-6">
-        The integrity column logs tab switches and pasted code during the exam window — a signal
+        The integrity column logs tab switches, fullscreen exits and pasted code during the exam window — a signal
         to review, not proof of misconduct on its own.
       </p>
       {results.length === 0 ? (

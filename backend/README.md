@@ -1,6 +1,6 @@
 # CodeCloud - Backend
 
-**Version 0.0.5**
+**Version 0.0.6**
 
 Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam System.
 
@@ -26,6 +26,9 @@ Node.js/Express API for the Cloud-Based Multi-Platform Coding Education and Exam
   process limit - see "Sandbox architecture" below
 - **Courses and enrolment (new in 0.0.5):** problems and exams belong to a course; students see
   only the courses they joined, teachers only the courses they own - see "Courses" below
+- **Exam experience (new in 0.0.6):** randomised per-student problem pools, per-student time
+  extensions, teacher grade overrides, autosaved drafts and fullscreen-exit monitoring - see
+  "Sitting an exam" below
 
 ## Setup
 
@@ -108,15 +111,21 @@ npm run test:similarity  # similarity engine's own scenario checks
 mounting the Express app directly (`src/app.js` deliberately opens no ports or connections, which
 is what makes this possible).
 
-It also contains the course-isolation integration tests, which need a real PostgreSQL because the
-rules they check live entirely in SQL. They **skip** when no database is reachable, so `npm test`
-still works on a laptop without one:
+It also contains the integration suites - course isolation and exam experience - which need a
+real PostgreSQL, because the rules they check (who can see what, whose exam window is open) live
+entirely in SQL and mocking the database would only test the mock. They **skip** when no database
+is reachable, so `npm test` still works on a laptop without one:
 
 ```bash
 docker run -d --name codecloud-pg -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=codecloud_test -p 55432:5432 postgres:16-alpine
-TEST_DB_PORT=55432 npm test
+docker run -d --name codecloud-redis -p 56379:6379 redis:7-alpine
+
+TEST_DB_PORT=55432 TEST_REDIS_PORT=56379 npm test
 ```
+
+Redis is only needed for the handful of assertions that submit code successfully, since that path
+enqueues a grading job; without it those specific tests fail fast rather than hanging.
 
 Set `REQUIRE_TEST_DB=1` to turn a missing database into a failure instead of a skip. CI sets it,
 because a green build with silently skipped isolation tests is precisely the false confidence
@@ -190,6 +199,14 @@ toolchains directly, so they need the table above regardless of `SANDBOX_MODE`.
 | GET    | /api/courses/:id/roster             | Students enrolled in a course               | Owning teacher |
 | DELETE | /api/courses/:id/roster/:userId     | Remove a student from a course              | Owning teacher |
 | POST   | /api/courses/:id/regenerate-code    | Invalidate the current join code            | Owning teacher |
+| GET    | /api/exams/:id/assignments          | Who was dealt which problems (randomised exams) | Owning teacher |
+| GET    | /api/exams/:id/accommodations       | Who has extra time                          | Owning teacher |
+| PUT    | /api/exams/:id/accommodations/:userId | Grant/change extra time (0 removes)       | Owning teacher |
+| PUT    | /api/exams/:id/grades/:userId/:problemId | Override the automatic grade           | Owning teacher |
+| DELETE | /api/exams/:id/grades/:userId/:problemId | Fall back to the automatic grade       | Owning teacher |
+| PUT    | /api/drafts                         | Autosave in-progress code                   | Authenticated (own) |
+| GET    | /api/drafts?problem_id=&exam_id=    | Restore in-progress code                    | Authenticated (own) |
+| DELETE | /api/drafts?problem_id=&exam_id=    | Discard a draft                             | Authenticated (own) |
 
 ## Courses
 
@@ -211,6 +228,33 @@ Before v0.0.5 none of this existed: every authenticated user could read every pr
 student on the server, and any teacher could edit or delete any other teacher's content.
 Upgrading is lossless - `004_courses.sql` moves existing content into one "General" course and
 enrols every existing user in it, so an upgraded installation behaves exactly as it did before.
+
+## Sitting an exam
+
+**Randomised pools.** An exam with `problems_per_student` set deals each student that many
+problems at random from its pool. The deal is written to `exam_assignments` the first time the
+student opens the exam rather than re-derived from a seed, because it has to be stable across
+reloads and devices, must not change if the teacher edits the problem list mid-exam, and has to
+be auditable when a student questions their paper (`GET /api/exams/:id/assignments`). Answering a
+problem you weren't dealt is refused.
+
+**Time extensions.** `exam_accommodations` grants a student extra minutes. `examSession.service.js`
+computes the effective deadline in one place and every window check goes through it - submitting,
+loading the exam and integrity logging - so an accommodation cannot be honoured on one endpoint
+and silently ignored on another. The student's exam page counts down against their own deadline.
+
+**Grade overrides.** Auto-grading compares stdout exactly, so a correct answer with a trailing
+formatting difference scores zero. A teacher can set the score directly; the results table shows
+the final score, the automatic one, and who changed it, so an override is never invisible.
+
+**Drafts.** Code is autosaved as the student types and restored on return, so a refresh or a
+dropped connection mid-exam doesn't lose it. Drafts are private to their author - no endpoint
+exposes one student's draft to anyone else, including teachers - and an exam draft is stored
+separately from a practice draft for the same problem.
+
+**Monitoring.** Tab switches, pasted code and fullscreen exits are logged during the exam window
+and surfaced per student to the teacher. All three are signals to review, never automatic blocks:
+client-side blocking is trivial to bypass and would only be a false sense of security.
 
 ## Academic integrity engine
 
