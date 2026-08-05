@@ -24,6 +24,8 @@ vi.mock('../src/hooks/useSubmissionSocket', () => ({ useSubmissionSocket: () => 
 const { default: Courses } = await import('../src/pages/Courses');
 const { default: ProblemSolve } = await import('../src/pages/ProblemSolve');
 const { default: Login } = await import('../src/pages/Login');
+const { default: TeacherPanel } = await import('../src/pages/TeacherPanel');
+const { default: CourseRoster } = await import('../src/pages/CourseRoster');
 
 const stub = (routes) => stubRoutes(api, routes);
 
@@ -48,7 +50,16 @@ describe('courses', () => {
     stub({
       'GET /courses': {
         courses: [
-          { id: 1, title: 'Algorithms', term: '2026 Spring', problem_count: 4, teacher_name: 'Ada' },
+          {
+            id: 1,
+            title: 'Algorithms',
+            term: '2026 Spring',
+            problem_count: 4,
+            teacher_name: 'Ada',
+            // Deliberately present: if a server ever over-shares this field,
+            // the student's view still has to withhold it.
+            join_code: 'K7QP2XRT',
+          },
         ],
       },
     });
@@ -56,8 +67,12 @@ describe('courses', () => {
 
     expect(await screen.findByText('Algorithms')).toBeInTheDocument();
     expect(screen.getByText(/2026 Spring/)).toBeInTheDocument();
-    // The join code is the credential for entering a course; students never see it.
-    expect(screen.queryByText(/join code/i)).not.toBeInTheDocument();
+    // The join code is the credential for entering a course; students never
+    // see the value, nor the teacher's block for handing it out. The student's
+    // own "join a course" field is labelled "join code" and is not a leak, so
+    // this asserts the secret rather than the phrase.
+    expect(screen.queryByText('K7QP2XRT')).not.toBeInTheDocument();
+    expect(screen.queryByText(/share this with students/i)).not.toBeInTheDocument();
   });
 
   it('lets a student join with a code and reports the result', async () => {
@@ -208,6 +223,43 @@ describe('accessibility', () => {
     stub({ 'GET /problems/1': PROBLEM, 'GET /drafts': { draft: null } });
     const { container } = renderApp(<ProblemSolve />, { route: '/problem/1', path: '/problem/:id' });
     await screen.findByLabelText(/code editor/i);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  // The teacher pages carry most of the app's form controls and were the last
+  // ones with fields that had a placeholder and no label. eslint cannot see a
+  // htmlFor/id pair across two elements, so axe is what actually holds this
+  // line - which means these pages have to be rendered here.
+  it('the teacher panel has no detectable violations, with both forms open', async () => {
+    signIn({ role: 'teacher' });
+    stub({
+      'GET /problems': { problems: [{ id: 1, title: 'Double it', difficulty: 'easy', course_id: 1 }] },
+      'GET /exams': { exams: [] },
+      'GET /courses': { courses: [{ id: 1, title: 'Algorithms', term: '2026 Spring' }] },
+    });
+    const { container } = renderApp(<TeacherPanel />);
+
+    // The forms are collapsed by default; an unopened form is an untested one.
+    await userEvent.click(await screen.findByRole('button', { name: /new problem/i }));
+    await screen.findByLabelText(/problem description/i);
+    expect(await axe(container)).toHaveNoViolations();
+
+    await userEvent.click(screen.getByRole('button', { name: /^exams$/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /new exam/i }));
+    await screen.findByLabelText(/duration/i);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('the roster has no detectable violations', async () => {
+    signIn({ role: 'teacher' });
+    stub({
+      'GET /courses/1/roster': {
+        students: [{ id: 7, name: 'Ada Lovelace', email: 'ada@x.edu', submission_count: 3 }],
+      },
+      'GET /courses/1': { course: { id: 1, title: 'Algorithms', join_code: 'K7QP2XRT' } },
+    });
+    const { container } = renderApp(<CourseRoster />, { route: '/courses/1/roster', path: '/courses/:id/roster' });
+    await screen.findByText('Ada Lovelace');
     expect(await axe(container)).toHaveNoViolations();
   });
 });

@@ -2,6 +2,84 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.1] - Linted and Translated
+
+v0.1.0 shipped a frontend that no linter had ever read, and a translation that
+stopped halfway. This closes both, and the tooling immediately found that
+v0.1.0's own accessibility fix had been applied without running anything.
+
+### Added
+- **ESLint on the frontend**, with `react`, `react-hooks` and `jsx-a11y`, wired
+  into CI ahead of the tests. Ten releases, 3,203 lines of JSX, no linter; the
+  first run reported 47 problems.
+- **Accessibility coverage for the teacher pages.** The panel and the roster
+  carry most of the app's form controls and were not in the axe suite. Both are
+  now rendered with their forms open — a collapsed form is an unchecked one.
+- **`dateLocale()`**, so dates follow the interface language.
+
+### Fixed
+- **Every test-case row rendered the same DOM `id`.** v0.1.0 added
+  `id="teacherpanel-test-cases"` inside a `.map()`, so with three test cases
+  three inputs claimed one id and the label pointed at whichever the browser
+  found first. Ids in repeated rows are now derived per row from `useId()`.
+- **A label pointing at nothing.** The "sample" checkbox's `htmlFor` named
+  `teacherpanel-updatetestcase-idx-is-sample-e-target-ch`, an id that existed
+  nowhere in the app. A `htmlFor` that resolves to no element also suppresses
+  the implicit association from wrapping the input, so the checkbox had no
+  accessible name at all.
+- **Broken heading order on the teacher panel** — `h1` straight to `h3`, found
+  by the new axe test on its first run. Heading level is how a screen-reader
+  user navigates a page.
+- **Dates were formatted `en-US` in seven places** regardless of language.
+  `03/04/2026` is 4 March to a Turkish reader and 3 April to an American one,
+  with nothing on screen to say which — an exam start time that reads as the
+  wrong month is worse than an untranslated one.
+- The six starter-code boxes were hand-written with slugified ids, which left
+  the C++ field wearing `...-c-starter-code` and the C field `...-c-starter-code-2`.
+  They are generated from a list now, so the ids cannot drift from their labels.
+- Buttons repeated per row — "delete", "remove", "regenerate",
+  "view side-by-side" — now name their subject in the accessible label. A
+  screen reader previously announced a column of identical "delete"s.
+
+### Changed
+- **Translation finished**: 109 catalogue keys to 274, and 58 hardcoded English
+  strings to zero. The teacher panel, analytics, exam results, similarity
+  report, roster, student pages and the two auth fallback messages are now
+  translated; so are placeholders and `aria-label`s, which the v0.1.0 pass had
+  skipped even on pages it otherwise covered. Several pages had catalogue
+  entries written for them that were never wired up.
+- The student "no join code" test now asserts the code *value* is absent while
+  the server deliberately over-shares it, rather than matching the phrase "join
+  code" — which also appears on the student's own join field, and is not a leak.
+  The stronger form was confirmed by reverting the `isTeacher` guard.
+- The frontend pins the ESLint 9 line while the backend is on 10: neither
+  `eslint-plugin-react` nor `eslint-plugin-jsx-a11y` declares support for 10,
+  and dropping the accessibility rules to unify the major would give up the
+  only rules here that have caught a real defect.
+
+### Deliberately not enabled
+`jsx-a11y/control-has-associated-label` looks like the rule for "an input with
+no label", and it reported 33 of them. It cannot follow a `htmlFor`/`id` pair
+across two elements, so most of those were correctly labelled fields. It is off,
+and axe — which resolves the association properly and runs on every page in the
+suite — is what holds that line instead. Verified by deleting a label and
+watching axe fail with "Form elements must have labels".
+
+### Verified
+177 backend tests, 34 frontend tests (was 32), both lint suites clean, 7/7
+sandbox containment checks against real containers, production build green.
+Three mutation tests: a label removed, an English string left in the Turkish
+catalogue, and the join-code guard reverted — each failed the test meant to
+catch it. Bundle grew 726.4 KB to 739.8 KB (gzip 208.7 to 212.6).
+
+### Known limitations (tracked for future versions)
+- The bundle is still one chunk; no code splitting
+- Turkish translations are mine, not a native reviewer's; the teacher-facing
+  wording in particular would benefit from a read-through by an instructor
+- axe catches structural problems, not everything a screen-reader user would hit
+- `react-hooks/exhaustive-deps` is a warning, not an error — there are no
+  current violations, but it is not enforced
+
 ## [0.1.0] - First Beta
 
 Nine releases of backend depth on a frontend nobody had ever tested. This one

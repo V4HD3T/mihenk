@@ -35,24 +35,21 @@ export default function Register() {
           <span className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-ink font-mono text-xs font-bold">
             &gt;_
           </span>
-          <span className="font-display text-xl font-semibold">CodeCloud</span>
+          <span className="font-display text-xl font-semibold">{t('app.name')}</span>
         </div>
         <div>
           <h1 className="font-display text-4xl leading-tight font-medium mb-6">
-            Cloud-based
+            {t('auth.registerHeroLine1')}
             <br />
-            coding education
+            {t('auth.registerHeroLine2')}
             <br />
-            <span className="italic text-white/60">in one platform.</span>
+            <span className="italic text-white/60">{t('auth.registerHeroLine3')}</span>
           </h1>
-          <p className="text-white/60 max-w-sm leading-relaxed">
-            Teachers create exercises and exams with automatic grading; students write code in
-            the browser and see results instantly.
-          </p>
+          <p className="text-white/60 max-w-sm leading-relaxed">{t('app.blurb')}</p>
         </div>
         <div className="flex gap-6 font-mono text-xs text-white/40">
-          <span>AUTOMATIC GRADING</span>
-          <span>ANALYTICS</span>
+          <span>{t('auth.featureGrading')}</span>
+          <span>{t('auth.featureAnalytics')}</span>
         </div>
       </div>
 
@@ -80,7 +77,9 @@ export default function Register() {
               />
             </div>
             <div>
-              <label htmlFor="register-email" className="block text-sm font-medium mb-1.5">Email</label>
+              <label htmlFor="register-email" className="block text-sm font-medium mb-1.5">
+                {t('auth.email')}
+              </label>
               <input
                 id="register-email"
                 name="email"
@@ -94,7 +93,9 @@ export default function Register() {
               />
             </div>
             <div>
-              <label htmlFor="register-password" className="block text-sm font-medium mb-1.5">Password</label>
+              <label htmlFor="register-password" className="block text-sm font-medium mb-1.5">
+                {t('auth.password')}
+              </label>
               <input
                 id="register-password"
                 name="password"
@@ -112,8 +113,8 @@ export default function Register() {
             {teacherEnabled && (
               <div>
                 <label htmlFor="register-invite" className="block text-sm font-medium mb-1.5">
-                  Teacher invite code{' '}
-                  <span className="text-inkmuted font-normal">(optional)</span>
+                  {t('auth.inviteCode')}{' '}
+                  <span className="text-inkmuted font-normal">{t('auth.optional')}</span>
                 </label>
                 <input
                   id="register-invite"
@@ -121,12 +122,10 @@ export default function Register() {
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-card border border-line bg-surface focus:border-primary outline-none transition-colors"
-                  placeholder="Leave empty to join as a student"
+                  placeholder={t('auth.inviteCodePlaceholder')}
                   autoComplete="off"
                 />
-                <p className="text-xs text-inkmuted mt-1.5">
-                  Ask your institution for this code. Without it you'll be registered as a student.
-                </p>
+                <p className="text-xs text-inkmuted mt-1.5">{t('auth.inviteCodeHint')}</p>
               </div>
             )}
 
@@ -146,7 +145,7 @@ export default function Register() {
           <p className="text-sm text-inkmuted mt-6">
             {t('auth.haveAccount')}{' '}
             <Link to="/login" className="text-primary font-medium hover:underline">
-              Log in
+              {t('auth.logIn')}
             </Link>
           </p>
         </div>

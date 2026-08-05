@@ -1,9 +1,13 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import api from '../api/axios';
+import { useT } from '../i18n/index.jsx';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  // Safe because main.jsx mounts I18nProvider outside this one, so that these
+  // fallback messages are translated like everything else the user reads.
+  const t = useT();
   const [user, setUser] = useState(() => {
     const stored = localStorage.getItem('codecloud_user');
     return stored ? JSON.parse(stored) : null;
@@ -25,12 +29,12 @@ export function AuthProvider({ children }) {
       persist(data.user, data.token);
       return true;
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      setError(err.response?.data?.error || t('auth.loginFailed'));
       return false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // The server decides the role: an account is a student unless the request
   // carries a valid teacher invite code, so there is no `role` field to send.
@@ -47,12 +51,12 @@ export function AuthProvider({ children }) {
       persist(data.user, data.token);
       return true;
     } catch (err) {
-      setError(err.response?.data?.error || 'Registration failed');
+      setError(err.response?.data?.error || t('auth.registerFailed'));
       return false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('codecloud_token');

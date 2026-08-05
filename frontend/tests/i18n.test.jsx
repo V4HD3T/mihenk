@@ -50,9 +50,18 @@ describe('translation catalogues', () => {
   });
 
   it('no Turkish string is left as the English original', () => {
-    // A handful legitimately match - the product name, and strings that are
-    // only punctuation or a placeholder.
-    const allowed = new Set(['app.name']);
+    // A handful legitimately match - the product name, the names of
+    // programming languages, and strings that are only punctuation and
+    // placeholders. Everything else being identical means it was never
+    // translated.
+    const allowed = new Set([
+      'app.name',
+      'nav.brand',
+      'languages.python',
+      'languages.java',
+      'languages.javascript',
+      'exam.schedule',
+    ]);
     const identical = keysOf(en).filter((key) => {
       const read = (o) => key.split('.').reduce((n, p) => n?.[p], o);
       const e = read(en);

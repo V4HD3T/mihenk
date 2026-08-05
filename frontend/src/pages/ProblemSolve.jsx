@@ -4,6 +4,8 @@ import api from '../api/axios';
 import CodeEditor from '../components/CodeEditor';
 import ResultBubbles from '../components/ResultBubbles';
 import { useSubmissionSocket } from '../hooks/useSubmissionSocket';
+import { useI18n, useT } from '../i18n/index.jsx';
+import { dateLocale } from '../i18n/format.js';
 
 const LANGUAGES = [
   { value: 'python', label: 'Python' },
@@ -18,6 +20,11 @@ export default function ProblemSolve() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const examId = searchParams.get('exam');
+  const t = useT();
+  // `language` below is the *programming* language being edited; this one is
+  // the interface language. Keeping the names apart avoids formatting a
+  // timestamp with "python" as its locale.
+  const { language: uiLanguage } = useI18n();
 
   const [problem, setProblem] = useState(null);
   const [testCases, setTestCases] = useState([]);
@@ -255,18 +262,22 @@ export default function ProblemSolve() {
           </div>
           <p className="text-ink/80 leading-relaxed whitespace-pre-wrap mb-6">{problem.description}</p>
 
-          <h2 className="font-medium text-sm uppercase tracking-wide text-inkmuted mb-3">Sample Test Cases</h2>
+          <h2 className="font-medium text-sm uppercase tracking-wide text-inkmuted mb-3">
+            {t('solve.sampleTestCases')}
+          </h2>
           <div className="space-y-3">
             {testCases.map((tc, i) => (
               <div key={tc.id} className="border border-line rounded-card overflow-hidden">
-                <div className="text-xs font-mono px-3 py-1.5 bg-ink/5 text-inkmuted">Sample {i + 1}</div>
+                <div className="text-xs font-mono px-3 py-1.5 bg-ink/5 text-inkmuted">
+                  {t('solve.sampleNumber', { number: i + 1 })}
+                </div>
                 <div className="grid grid-cols-2 divide-x divide-line font-mono text-sm">
                   <div className="p-3">
-                    <div className="text-xs text-inkmuted mb-1">Input</div>
-                    <pre className="whitespace-pre-wrap">{tc.input || '(none)'}</pre>
+                    <div className="text-xs text-inkmuted mb-1">{t('solve.input')}</div>
+                    <pre className="whitespace-pre-wrap">{tc.input || t('solve.noInput')}</pre>
                   </div>
                   <div className="p-3">
-                    <div className="text-xs text-inkmuted mb-1">Expected Output</div>
+                    <div className="text-xs text-inkmuted mb-1">{t('solve.expectedOutput')}</div>
                     <pre className="whitespace-pre-wrap">{tc.expected_output}</pre>
                   </div>
                 </div>
@@ -282,7 +293,7 @@ export default function ProblemSolve() {
                 announces six unlabelled buttons and never says which is active. */}
             <div
               role="group"
-              aria-label="Language"
+              aria-label={t('solve.language')}
               className="flex gap-1.5 bg-surface border border-line rounded-full p-1"
             >
               {LANGUAGES.map((l) => (
@@ -304,14 +315,16 @@ export default function ProblemSolve() {
           <CodeEditor language={language} value={code} onChange={setCode} onPaste={handlePaste} />
 
           <div className="mt-3">
-            <label htmlFor="problemsolve-input-stdin-for-run" className="text-xs text-inkmuted uppercase tracking-wide">Input (stdin) — for "Run"</label>
+            <label htmlFor="solve-stdin" className="text-xs text-inkmuted uppercase tracking-wide">
+              {t('solve.stdin')}
+            </label>
             <textarea
-            id="problemsolve-input-stdin-for-run"
+              id="solve-stdin"
               value={stdin}
               onChange={(e) => setStdin(e.target.value)}
               rows={2}
               className="w-full mt-1 px-3 py-2 rounded-card border border-line font-mono text-sm bg-surface focus:border-primary outline-none"
-              placeholder="Enter the input your program will read"
+              placeholder={t('solve.stdinPlaceholder')}
             />
           </div>
 
@@ -321,22 +334,28 @@ export default function ProblemSolve() {
               disabled={running || submitting}
               className="flex-1 py-2.5 rounded-card border border-ink text-ink font-medium hover:bg-ink hover:text-white transition-colors disabled:opacity-50"
             >
-              {running ? 'Running…' : '▶ Run'}
+              {running ? t('solve.running') : t('solve.run')}
             </button>
             <button
               onClick={handleSubmit}
               disabled={running || submitting}
               className="flex-1 py-2.5 rounded-card bg-primary text-white font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
             >
-              {submitPhase === 'queued' ? 'Queued…' : submitPhase === 'grading' ? 'Grading…' : 'Submit ✓'}
+              {submitPhase === 'queued'
+                ? t('solve.queued')
+                : submitPhase === 'grading'
+                  ? t('solve.grading')
+                  : t('solve.submit')}
             </button>
           </div>
 
           {(restoredDraft || draftSavedAt) && (
             <p className="mt-2 text-xs text-inkmuted">
               {restoredDraft && !draftSavedAt
-                ? 'Restored your unsubmitted work from last time.'
-                : `Draft saved ${new Date(draftSavedAt).toLocaleTimeString()}`}
+                ? t('solve.draftRestored')
+                : t('solve.draftSaved', {
+                    time: new Date(draftSavedAt).toLocaleTimeString(dateLocale(uiLanguage)),
+                  })}
             </p>
           )}
 

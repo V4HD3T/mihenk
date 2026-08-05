@@ -10,7 +10,6 @@ import { render } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '../src/context/AuthContext';
 import { I18nProvider } from '../src/i18n/index.jsx';
-import { vi } from 'vitest';
 
 /**
  * @param {JSX.Element} ui

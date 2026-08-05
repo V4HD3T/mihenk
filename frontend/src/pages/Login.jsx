@@ -24,20 +24,17 @@ export default function Login() {
           <span className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-ink font-mono text-xs font-bold">
             &gt;_
           </span>
-          <span className="font-display text-xl font-semibold">CodeCloud</span>
+          <span className="font-display text-xl font-semibold">{t('app.name')}</span>
         </div>
         <div>
           <h1 className="font-display text-4xl leading-tight font-medium mb-6">
-            Write your code,
+            {t('auth.loginHeroLine1')}
             <br />
-            compile it instantly,
+            {t('auth.loginHeroLine2')}
             <br />
-            <span className="italic text-white/60">see the result.</span>
+            <span className="italic text-white/60">{t('auth.loginHeroLine3')}</span>
           </h1>
-          <p className="text-white/60 max-w-sm leading-relaxed">
-            Solve exercises in Python, C++, and Java, take your teachers' exams, and get instant
-            feedback with automatic grading.
-          </p>
+          <p className="text-white/60 max-w-sm leading-relaxed">{t('auth.loginHeroBlurb')}</p>
         </div>
         <div className="flex gap-6 font-mono text-xs text-white/40">
           <span>PYTHON</span>
@@ -49,12 +46,14 @@ export default function Login() {
       {/* Right panel: form */}
       <div className="flex items-center justify-center p-8 bg-paper">
         <div className="w-full max-w-sm">
-          <h2 className="font-display text-2xl font-semibold mb-1">Welcome back</h2>
-          <p className="text-inkmuted text-sm mb-8">Log in to your account and pick up where you left off.</p>
+          <h2 className="font-display text-2xl font-semibold mb-1">{t('auth.welcomeBack')}</h2>
+          <p className="text-inkmuted text-sm mb-8">{t('auth.loginSubtitle')}</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="login-email" className="block text-sm font-medium mb-1.5">Email</label>
+              <label htmlFor="login-email" className="block text-sm font-medium mb-1.5">
+                {t('auth.email')}
+              </label>
               <input
                 id="login-email"
                 name="email"
@@ -64,11 +63,13 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-card border border-line bg-surface focus:border-primary outline-none transition-colors"
-                placeholder="you@university.edu"
+                placeholder={t('auth.emailPlaceholder')}
               />
             </div>
             <div>
-              <label htmlFor="login-password" className="block text-sm font-medium mb-1.5">Password</label>
+              <label htmlFor="login-password" className="block text-sm font-medium mb-1.5">
+                {t('auth.password')}
+              </label>
               <input
                 id="login-password"
                 name="password"
@@ -97,14 +98,14 @@ export default function Login() {
               disabled={loading}
               className="w-full py-2.5 rounded-card bg-primary text-white font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
             >
-              {loading ? 'Logging in…' : 'Log in'}
+              {loading ? t('auth.loggingIn') : t('auth.logIn')}
             </button>
           </form>
 
           <p className="text-sm text-inkmuted mt-6">
-            Don't have an account?{' '}
+            {t('auth.noAccount')}{' '}
             <Link to="/register" className="text-primary font-medium hover:underline">
-              Sign up
+              {t('auth.signUp')}
             </Link>
           </p>
         </div>

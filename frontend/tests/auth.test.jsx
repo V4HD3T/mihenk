@@ -10,12 +10,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderApp, stubRoutes, fails } from './helpers.jsx';
-import { makeApiMock } from './apiMock.js';
 import Register from '../src/pages/Register';
 import Login from '../src/pages/Login';
 
 const api = vi.hoisted(() => {
-  // eslint-disable-next-line no-undef
   return {
     get: vi.fn(),
     post: vi.fn(),

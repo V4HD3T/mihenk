@@ -1,7 +1,7 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.1.0**
+**Version 0.1.1**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
@@ -142,6 +142,13 @@ flows, which immediately found that not one form label in the application was as
 input - twenty of them - so the interface was unusable with a screen reader. Password reset and
 email confirmation arrived, verified end to end against a real SMTP server. The interface is now
 Turkish and English, with the two catalogues held in sync by a test.
+
+v0.1.1 finished the translation and gave the frontend the linter it had gone ten releases
+without. The linter's first run reported 47 problems, and the accessibility rules found that
+v0.1.0's label fix had been applied mechanically: one `id` was assigned inside a `.map()`, so
+every test-case row shared it, and one `htmlFor` pointed at an element that did not exist. The
+teacher pages joined the axe suite, which immediately found a broken heading order. Dates had
+been formatted `en-US` everywhere, so a Turkish reader saw 03/04/2026 for 4 March.
 
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants

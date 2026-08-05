@@ -56,9 +56,9 @@ export default function Navbar() {
             <span className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-white font-mono text-xs font-bold">
               &gt;_
             </span>
-            <span className="font-display text-lg font-semibold tracking-tight">CodeCloud</span>
+            <span className="font-display text-lg font-semibold tracking-tight">{t('nav.brand')}</span>
           </NavLink>
-          <nav aria-label="Main" className="hidden md:flex items-center gap-1">
+          <nav aria-label={t('nav.main')} className="hidden md:flex items-center gap-1">
             {user.role === 'student' && (
               <>
                 <NavItem to="/">{t('nav.problems')}</NavItem>
