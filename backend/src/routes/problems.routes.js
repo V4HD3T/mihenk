@@ -22,7 +22,8 @@ router.get('/', requireAuth, async (req, res) => {
        JOIN courses c ON c.id = p.course_id
        LEFT JOIN users u ON u.id = p.created_by
        LEFT JOIN submissions s ON s.problem_id = p.id
-       WHERE ${scope.sql} AND ($3::int IS NULL OR p.course_id = $3)
+       WHERE ${scope.sql} AND ${access.problemVisibility(req.user, 'p.id')}
+             AND ($3::int IS NULL OR p.course_id = $3)
        GROUP BY p.id, c.title, u.name
        ORDER BY p.created_at DESC`,
       [req.user.id, ...scope.params, courseId]
@@ -38,10 +39,13 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/:id', requireAuth, async (req, res) => {
   try {
     // Scoped in the same query as the lookup: a problem in a course the caller
-    // isn't in is indistinguishable from one that doesn't exist.
+    // isn't in is indistinguishable from one that doesn't exist. The same goes
+    // for an exam paper whose exam has not started - a student learns nothing
+    // from the difference between "not yours" and "not yet".
     const scope = access.courseScope(req.user, 'p.course_id', 2);
     const problemResult = await pool.query(
-      `SELECT p.* FROM problems p WHERE p.id = $1 AND ${scope.sql}`,
+      `SELECT p.* FROM problems p
+       WHERE p.id = $1 AND ${scope.sql} AND ${access.problemVisibility(req.user, 'p.id')}`,
       [req.params.id, ...scope.params]
     );
     if (problemResult.rows.length === 0) {

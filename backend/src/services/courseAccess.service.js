@@ -13,6 +13,7 @@
  * course-owned content must go through a filter from this module.
  */
 
+const crypto = require('crypto');
 const pool = require('../config/db');
 
 /**
@@ -35,6 +36,44 @@ function courseScope(user, courseColumn, nextParamIndex) {
     sql: `EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = ${courseColumn} AND e.user_id = $${nextParamIndex})`,
     params: [user.id],
   };
+}
+
+/**
+ * A SQL fragment that hides a scheduled exam's problems until it starts.
+ *
+ * Course membership alone is the wrong test for an exam paper: an exam's
+ * problems belong to the course by construction, so every enrolled student
+ * could read tomorrow's questions today - and, for a randomised exam, lock in
+ * their deal early and revise exactly those. Course scope answers "may this
+ * person ever see this?"; this answers "may they see it yet?".
+ *
+ * The rule: a problem in no exam is ordinary practice material and always
+ * visible. A problem in one or more exams becomes visible once any of those
+ * exams has started, and stays visible afterwards so students can review their
+ * paper. Teachers are never gated - they write the things.
+ *
+ * Known limitation: two sittings of the same paper in one course (a make-up
+ * exam a day later) share visibility, because an exam has no roster of its own -
+ * once the first sitting opens, the problems are readable by everyone in the
+ * course. Per-exam rosters would fix it and are not modelled yet.
+ *
+ * Takes no bind parameters, so it composes with courseScope without disturbing
+ * the caller's parameter numbering.
+ */
+function examGateSql(problemIdColumn) {
+  return `(
+    NOT EXISTS (SELECT 1 FROM exam_problems gate_ep WHERE gate_ep.problem_id = ${problemIdColumn})
+    OR EXISTS (
+      SELECT 1 FROM exam_problems gate_ep2
+      JOIN exams gate_x ON gate_x.id = gate_ep2.exam_id
+      WHERE gate_ep2.problem_id = ${problemIdColumn} AND gate_x.start_time <= NOW()
+    )
+  )`;
+}
+
+/** The gate, or an always-true fragment for teachers. */
+function problemVisibility(user, problemIdColumn) {
+  return user.role === 'teacher' ? 'TRUE' : examGateSql(problemIdColumn);
 }
 
 /** Course ids the user may see, for the cases where a list is easier than a join. */
@@ -75,7 +114,8 @@ async function ownsCourse(user, courseId) {
 async function canAccessProblem(user, problemId) {
   const scope = courseScope(user, 'p.course_id', 2);
   const { rows } = await pool.query(
-    `SELECT 1 FROM problems p WHERE p.id = $1 AND ${scope.sql}`,
+    `SELECT 1 FROM problems p
+     WHERE p.id = $1 AND ${scope.sql} AND ${problemVisibility(user, 'p.id')}`,
     [problemId, ...scope.params]
   );
   return rows.length > 0;
@@ -126,10 +166,22 @@ async function canAccessExam(user, examId) {
  */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
-function generateJoinCode(length = 8, random = () => Math.random()) {
+/**
+ * A join code is a capability: holding one enrols you in the course and opens
+ * its problems and exams. That makes Math.random() the wrong source - V8's
+ * generator is fast, not unpredictable, and its internal state can be
+ * recovered from a handful of outputs, so a teacher who hands out several
+ * codes would be publishing the seed for the next one. Guessing was never the
+ * threat here (31^8 codes against a 300-request budget); predicting was.
+ *
+ * crypto.randomInt rejection-samples, so the 31-character alphabet stays
+ * uniform - taking a random byte modulo 31 would quietly favour the first
+ * eight letters.
+ */
+function generateJoinCode(length = 8) {
   let code = '';
   for (let i = 0; i < length; i++) {
-    code += CODE_ALPHABET[Math.floor(random() * CODE_ALPHABET.length)];
+    code += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
   }
   return code;
 }
@@ -146,6 +198,8 @@ async function allocateJoinCode() {
 
 module.exports = {
   courseScope,
+  examGateSql,
+  problemVisibility,
   accessibleCourseIds,
   canAccessCourse,
   ownsCourse,

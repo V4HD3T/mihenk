@@ -2,6 +2,96 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.1.2] - Exam Integrity
+
+An audit of the API turned up the defect this project most needed not to have:
+a scheduled exam's questions could be read by any enrolled student before the
+exam started. Ten releases of sandboxing, similarity screening and tab-switch
+logging sat on top of a paper that anyone in the class could open the night
+before.
+
+### Security
+- **Exam papers are sealed until the exam opens.** Every access check asked one
+  question — is this user in the problem's course? — and an exam's problems
+  belong to that course by construction. So `GET /api/problems/:id` returned
+  the full description, starter code and sample tests of tomorrow's exam to
+  anyone enrolled, `GET /api/problems` listed it by title, and
+  `GET /api/exams/:id` handed over the paper. Reproduced against a real
+  database before the fix, with an exam scheduled for the following day:
+
+  ```
+  GET /api/problems/:id  ->  200
+  description: "THE SECRET EXAM QUESTION TEXT"
+  starter:     "# secret starter"
+  ```
+
+  A problem in no exam is practice material and stays visible. A problem in an
+  exam becomes visible when one of its exams starts, and stays visible
+  afterwards so students can review their paper. Teachers are never gated.
+- **Submitting was a better leak than reading.** The exam-window check only ran
+  when a submission carried an `exam_id`. Submitting the same problem as
+  ordinary practice skipped it, ran the *hidden* tests and reported which
+  passed — an oracle for the paper rather than merely a copy of it. The
+  visibility gate now sits on the problem lookup that both paths share.
+- **Looking early no longer deals the paper.** On a randomised exam
+  (`problems_per_student`), the exam view assigns each student their subset on
+  first read and stores it. A student who peeked the night before settled their
+  own deal early and could revise exactly those questions. Nothing is dealt
+  before the exam opens.
+- **Join codes come from `crypto.randomInt`,** not `Math.random()`. A join code
+  is a capability — it enrols the holder and opens the course's content — and
+  V8's generator is fast rather than unpredictable, so a teacher handing out
+  several codes was publishing the state that produces the next one. Guessing
+  was never the threat (31^8 codes against a 300-request budget); predicting
+  was. `randomInt` rejection-samples, so the 31-character alphabet stays
+  uniform.
+
+### Fixed
+- **A student's progress denominator counted the whole server.** Every other
+  query on the analytics route was scoped to the caller; `totalProblems` was
+  `SELECT COUNT(*) FROM problems`. A student enrolled in one course holding one
+  problem was shown "0 / 4" on an installation with four, which is both the
+  wrong number and a running total of the whole deployment.
+- **Teachers saw each other's submission counts.** `/api/users/students`
+  restricted *which students* it listed but joined submissions on `user_id`
+  alone, so the counts beside each name totalled that student's work across
+  every course they take. The detail endpoint beside it, `/students/:id`, had
+  scoped this correctly since v0.0.5 — the rule was known, just not applied
+  evenly.
+- **Exam papers were not worth 100.** Points were `floor(100 / n)` per problem,
+  so a three-problem exam totalled 99, six totalled 96 and seven totalled 98.
+  The remainder is now spread one point at a time, leaving every problem within
+  a point of every other.
+
+### Verified
+207 backend tests (was 177) and 34 frontend tests, both lint suites clean, 7/7
+sandbox containment checks against real containers, production build green, and
+`npm ci` from a clean tree in both packages.
+
+Every fix in this release was written test-first and then **mutation-tested**:
+the fix was deliberately reverted and the suite watched to fail. Six mutations,
+six catches — except that the first version of the join-code uniformity test
+did *not* catch a biased `byte % 31` generator. Its 15% per-character tolerance
+was looser than the 9.1% skew it existed to detect, and no per-character
+tolerance can separate that skew from noise across 31 characters. It was
+replaced with a chi-square test over the whole alphabet (uniform ≈ 30, biased
+≈ 180, threshold 90) and re-mutated: caught 3/3, clean 5/5.
+
+### Known limitations
+- Two sittings of one paper in the same course — a make-up exam a day later —
+  share visibility, because an exam has no roster of its own. Once the first
+  sitting opens, its problems are readable by everyone in the course. Per-exam
+  rosters would fix this and are not modelled.
+- A submission naming a not-yet-started exam now answers 404 rather than the
+  window check's 403 "this exam has not started yet", because the problem
+  lookup fails first. That is the intended answer — "not yours" and "not yet"
+  stay indistinguishable — and the request is unreachable from the interface.
+  A submission to an exam that has *ended* still gets the explanatory 403.
+- The `regex` checker compiles a teacher-supplied pattern with no timeout, in
+  the worker process rather than inside a container. A catastrophically
+  backtracking pattern would pin a worker. Teacher-authored and so not urgent,
+  but it is the one place teacher input executes outside the sandbox.
+
 ## [0.1.1] - Linted and Translated
 
 v0.1.0 shipped a frontend that no linter had ever read, and a translation that

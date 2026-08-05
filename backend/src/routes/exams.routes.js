@@ -60,10 +60,16 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
         ]
       );
       const exam = examResult.rows[0];
-      for (const problemId of problem_ids) {
+      // floor(100/n) threw the remainder away, so a three-problem paper was
+      // marked out of 99 and a six-problem one out of 96. The leftover points
+      // go to the first problems, one each, which keeps every problem within a
+      // point of every other and the paper worth exactly 100.
+      const base = Math.floor(100 / problem_ids.length);
+      const remainder = 100 - base * problem_ids.length;
+      for (const [index, problemId] of problem_ids.entries()) {
         await client.query(
           'INSERT INTO exam_problems (exam_id, problem_id, points) VALUES ($1, $2, $3)',
-          [exam.id, problemId, Math.floor(100 / problem_ids.length)]
+          [exam.id, problemId, base + (index < remainder ? 1 : 0)]
         );
       }
       await client.query('COMMIT');
@@ -127,8 +133,18 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     // Students see only the problems they were dealt (identical to the full
     // pool unless the exam randomises); teachers see the whole pool.
-    let problemsResult;
-    if (req.user.role === 'student') {
+    //
+    // Nothing is dealt or listed before the exam opens. Calling
+    // assignedProblemIds early would not just leak the titles: on a randomised
+    // exam it writes the deal, so a student who looked the night before had
+    // their personal subset settled and could revise only those.
+    const started = req.user.role === 'teacher' || (await session.hasStarted(req.params.id));
+
+    let problemsResult = { rows: [] };
+    if (!started) {
+      // Fall through with an empty list - the exam itself, and when it starts,
+      // is information the student needs.
+    } else if (req.user.role === 'student') {
       const assigned = await session.assignedProblemIds(req.params.id, req.user.id);
       problemsResult = await pool.query(
         `SELECT p.id, p.title, p.difficulty, ep.points

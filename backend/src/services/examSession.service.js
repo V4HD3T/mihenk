@@ -91,6 +91,21 @@ async function effectiveEndTime(examId, userId, client = pool) {
 }
 
 /**
+ * Has this exam opened yet?
+ *
+ * Distinct from isWindowOpen: once an exam has run, its problems stay readable
+ * so students can go back over their paper, but no new submission is accepted.
+ * Visibility asks this question; submission asks the other one.
+ */
+async function hasStarted(examId, client = pool) {
+  const { rows } = await client.query(
+    'SELECT start_time <= NOW() AS started FROM exams WHERE id = $1',
+    [examId]
+  );
+  return rows.length > 0 && rows[0].started;
+}
+
+/**
  * Is this student allowed to be working on this exam right now?
  * Their personal end time is what counts, not the exam's nominal one.
  */
@@ -106,4 +121,4 @@ async function isWindowOpen(examId, userId, client = pool) {
   return { open: true, endsAt: end };
 }
 
-module.exports = { assignedProblemIds, effectiveEndTime, isWindowOpen, pickRandom };
+module.exports = { assignedProblemIds, effectiveEndTime, hasStarted, isWindowOpen, pickRandom };

@@ -6,6 +6,7 @@ import roles from '../src/services/roles.service.js';
 import envModule from '../src/config/env.js';
 import migrate from '../scripts/migrate.js';
 import schemas from '../src/validation/schemas.js';
+import courseAccess from '../src/services/courseAccess.service.js';
 
 const { resolveRole } = roles;
 const { loadEnv, DEFAULT_JWT_SECRET } = envModule;
@@ -137,5 +138,63 @@ describe('request schemas', () => {
   it('normalises email casing and whitespace on login', () => {
     const parsed = schemas.login.parse({ email: '  USER@Example.COM ', password: 'x' });
     expect(parsed.email).toBe('user@example.com');
+  });
+});
+
+describe('join codes', () => {
+  const { generateJoinCode, CODE_ALPHABET } = courseAccess;
+
+  it('uses only the unambiguous alphabet', () => {
+    for (let i = 0; i < 200; i++) {
+      for (const ch of generateJoinCode()) {
+        expect(CODE_ALPHABET).toContain(ch);
+      }
+    }
+  });
+
+  it('has the requested length', () => {
+    expect(generateJoinCode()).toHaveLength(8);
+    expect(generateJoinCode(12)).toHaveLength(12);
+  });
+
+  // Not a randomness test - a broken generator that returned a constant, or one
+  // seeded identically per process, would show up here immediately.
+  it('does not repeat itself', () => {
+    const seen = new Set();
+    for (let i = 0; i < 2000; i++) seen.add(generateJoinCode());
+    expect(seen.size).toBe(2000);
+  });
+
+  /**
+   * 31 is not a power of two, so the obvious implementation - take a random
+   * byte, modulo 31 - is not uniform: 256 = 8x31 + 8, so the first eight
+   * letters come up nine times per 256 and the other twenty-three eight times.
+   * That is a 9.1% excess, and it is the mistake this test exists to catch.
+   *
+   * A per-character tolerance cannot do it. Tight enough to see 9.1% is loose
+   * enough that, across 31 characters, ordinary noise trips it regularly. So
+   * this is a chi-square goodness-of-fit test over all 31 at once.
+   *
+   * 8000 codes x 8 characters = 64000 draws. Uniform gives chi-square about
+   * 30 +/- 8 (30 degrees of freedom); `byte % 31` gives about 180. The
+   * threshold of 90 sits far above the first and far below the second, so this
+   * fails on the bias and effectively never fails on chance - checked by
+   * mutation, not by argument.
+   */
+  it('draws from the alphabet uniformly', () => {
+    const counts = new Map();
+    const codes = 8000;
+    for (let i = 0; i < codes; i++) {
+      for (const ch of generateJoinCode()) counts.set(ch, (counts.get(ch) || 0) + 1);
+    }
+    expect(counts.size).toBe(CODE_ALPHABET.length);
+
+    const expected = (codes * 8) / CODE_ALPHABET.length;
+    let chiSquare = 0;
+    for (const ch of CODE_ALPHABET) {
+      const diff = (counts.get(ch) || 0) - expected;
+      chiSquare += (diff * diff) / expected;
+    }
+    expect(chiSquare).toBeLessThan(90);
   });
 });

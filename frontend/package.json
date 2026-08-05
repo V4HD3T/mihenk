@@ -1,6 +1,6 @@
 {
   "name": "codecloud-frontend",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Cloud-Based Multi-Platform Coding Education and Exam System - Frontend",
   "type": "module",
   "scripts": {

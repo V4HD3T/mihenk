@@ -38,9 +38,15 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
 
     // Scoped: submitting to a problem in a course you're not enrolled in is a
     // 404, the same as a problem that doesn't exist.
+    //
+    // The visibility gate belongs here too, and not only in the exam branch
+    // below. A submission carrying no exam_id skipped the window check
+    // entirely, so "practise" against tomorrow's paper ran its hidden tests and
+    // reported which ones passed - a better oracle than simply reading it.
     const scope = access.courseScope(req.user, 'p.course_id', 2);
     const problemResult = await pool.query(
-      `SELECT p.id FROM problems p WHERE p.id = $1 AND ${scope.sql}`,
+      `SELECT p.id FROM problems p
+       WHERE p.id = $1 AND ${scope.sql} AND ${access.problemVisibility(req.user, 'p.id')}`,
       [problem_id, ...scope.params]
     );
     if (problemResult.rows.length === 0) {

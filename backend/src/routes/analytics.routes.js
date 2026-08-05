@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const access = require('../services/courseAccess.service');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -75,7 +76,16 @@ router.get('/me', requireAuth, async (req, res) => {
       SELECT language, COUNT(*) AS count FROM submissions WHERE user_id = $1 GROUP BY language
     `, [req.user.id]);
 
-    const totalProblems = await pool.query('SELECT COUNT(*) AS count FROM problems');
+    // The denominator of "solved X of Y". Every other query on this route was
+    // scoped to the caller and this one was not, so Y counted every problem on
+    // the server - including courses the student had never joined, and papers
+    // for exams that have not started.
+    const scope = access.courseScope(req.user, 'p.course_id', 1);
+    const totalProblems = await pool.query(
+      `SELECT COUNT(*) AS count FROM problems p
+       WHERE ${scope.sql} AND ${access.problemVisibility(req.user, 'p.id')}`,
+      scope.params
+    );
 
     res.json({
       totals: totals.rows[0],
