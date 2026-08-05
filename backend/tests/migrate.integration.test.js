@@ -40,8 +40,28 @@ describeDb('migration runner', () => {
     });
   }
 
+  /**
+   * A pool that will not crash the run while its database is being dropped.
+   *
+   * These tests end by dropping the database they just built, and
+   * `DROP DATABASE ... WITH (FORCE)` terminates whatever backends are left. A
+   * pool whose socket is still tearing down then receives a FATAL 57P01 —
+   * "terminating connection due to administrator command" — which node-postgres
+   * emits as an `error` event. With no listener that is an unhandled error, and
+   * vitest fails the run even though every test passed: exactly what CI saw
+   * once new test files shifted the timing enough to lose the race.
+   *
+   * The error is expected and means nothing here, so it is swallowed rather
+   * than raced against with a sleep.
+   */
+  function makePool(database) {
+    const pool = new Pool({ ...db.dbConfig, database });
+    pool.on('error', () => {});
+    return pool;
+  }
+
   async function query(target, sql) {
-    const pool = new Pool({ ...db.dbConfig, database: target });
+    const pool = makePool(target);
     try {
       return await pool.query(sql);
     } finally {
@@ -50,7 +70,7 @@ describeDb('migration runner', () => {
   }
 
   beforeAll(async () => {
-    admin = new Pool({ ...db.dbConfig, database: 'postgres' });
+    admin = makePool('postgres');
     await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
     await admin.query(`CREATE DATABASE ${dbName}`);
   });
