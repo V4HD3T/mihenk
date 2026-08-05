@@ -15,7 +15,9 @@
     "logOut": "Çıkış yap",
     "language": "Dil",
     "brand": "CodeCloud",
-    "main": "Ana menü"
+    "main": "Ana menü",
+    "mySubmissions": "Gönderimlerim",
+    "archive": "Arşiv"
   },
   "languages": {
     "python": "Python",
@@ -78,7 +80,8 @@
     "featureGrading": "OTOMATİK DEĞERLENDİRME",
     "featureAnalytics": "ANALİTİK",
     "loginFailed": "Giriş başarısız",
-    "registerFailed": "Kayıt başarısız"
+    "registerFailed": "Kayıt başarısız",
+    "forgotSent": "Bu adrese ait bir hesap varsa, sıfırlama bağlantısı yola çıktı."
   },
   "courses": {
     "title": "Dersler",
@@ -111,7 +114,16 @@
     "loadFailed": "Dersler yüklenemedi",
     "joinFailed": "Bu derse katılınamadı",
     "createFailed": "Ders oluşturulamadı",
-    "regenerateFailed": "Kod yenilenemedi"
+    "regenerateFailed": "Kod yenilenemedi",
+    "updateFailed": "Ders kaydedilemedi",
+    "editNamed": "{course} dersini düzenle",
+    "archiveCourse": "Bu dersi arşivle",
+    "archiveHelp": "Arşivlenen ders yeni öğrenci almayı durdurur. Mevcut içeriği ve kadrosu olduğu gibi kalır.",
+    "archiveForScreening": "taramaya al",
+    "archiveNamed": "{course} dersini sonraki dönemlerin taraması için sakla",
+    "confirmArchiveForScreening": "“{course}” dersindeki en son gönderimler tarama arşivinize kopyalansın mı? Sonraki dönemler bu dönemle karşılaştırılabilir hale gelir.",
+    "archivedForScreening": "{count} gönderim “{label}” adıyla arşivlendi.",
+    "archiveFailed": "Ders arşivlenemedi"
   },
   "roster": {
     "back": "← Dersler",
@@ -234,7 +246,25 @@
     "deleteProblemNamed": "{title} sorusunu sil",
     "confirmDeleteProblem": "\"{title}\" silinsin mi? Bu işlem sorunun gönderimlerini de siler.",
     "examMeta": "{problems} soru · {participants} katılımcı · {start}",
-    "viewResults": "sonuçları gör →"
+    "viewResults": "sonuçları gör →",
+    "edit": "düzenle",
+    "editProblemHeading": "“{title}” düzenleniyor",
+    "editProblemNamed": "{title} sorusunu düzenle",
+    "saveChanges": "Değişiklikleri kaydet",
+    "updateProblemFailed": "Soru kaydedilemedi",
+    "timeLimit": "Süre sınırı (sn)",
+    "memoryLimit": "Bellek sınırı (MB)",
+    "serverDefault": "sunucu varsayılanı",
+    "hidden": "gizli",
+    "deleteTestNamed": "{number}. testi sil",
+    "testCasesSaveImmediately": "Test durumları ekler eklemez kaydedilir — yukarıdaki Kaydet'e dahil değildir.",
+    "expectedOutputRequired": "Beklenen çıktı zorunludur.",
+    "lastTestCase": "Bir sorunun en az bir test durumu olmalı, yoksa hiç değerlendirilemez.",
+    "randomisePool": "Her öğrenciye bu soruların rastgele bir alt kümesini ver",
+    "problemsPerStudent": "Öğrenci başına soru",
+    "randomiseHelp": "Her öğrenciye, seçilen {total} sorudan {perStudent} tanesi sınavı ilk açtığında rastgele dağıtılır. Dağıtım kaydedilir, böylece sayfa yenilendiğinde aynı kâğıt görünür.",
+    "randomisedBadge": "öğrenci başına {count}",
+    "manage": "yönet"
   },
   "students": {
     "title": "Öğrenciler",
@@ -309,6 +339,62 @@
     "viewSideBySide": "yan yana gör →",
     "comparePair": "{a} ile {b} gönderimlerini yan yana karşılaştır",
     "close": "kapat ✕",
-    "comparing": "Karşılaştırılıyor…"
+    "comparing": "Karşılaştırılıyor…",
+    "archiveTitle": "Önceki dönemlerle eşleşmeler",
+    "archiveNote": "{size} arşivlenmiş gönderime karşı tarandı. Yalnızca her iki gönderimin de {threshold}% ve üzerini paylaşan çiftler listelenir — arşivde ölçek verecek bir sınıf tabanı yoktur, bu yüzden eşik bilerek yüksek tutulmuştur.",
+    "archiveNoMatches": "Hiçbir gönderim, listelenecek kadar arşivdekilere benzemiyor.",
+    "archivedFrom": "Arşiv kaynağı"
+  },
+  "examAdmin": {
+    "back": "← Panel",
+    "accommodations": "Ek süre",
+    "accommodationsHelp": "Yalnızca bu sınav için öğrencinin bitiş saatine eklenen dakika. 0 hakkı kaldırır. Geri sayım, gönderim penceresi ve dürüstlük kaydı uzatılmış süreyi esas alır.",
+    "extraMinutes": "Ek dakika",
+    "extraMinutesFor": "{name} için ek dakika",
+    "note": "Not",
+    "noteFor": "{name} için not",
+    "notePlaceholder": "Kendi kayıtlarınız için gerekçe",
+    "saveExtraTimeFor": "{name} için ek süreyi kaydet",
+    "grades": "Notlar",
+    "gradesHelp": "Not düzeltmesi, bir öğrencinin bir sorudaki otomatik notunun yerine geçer. Otomatik sonuç saklanır ve yanında gösterilir.",
+    "editGradeFor": "{name} adlı öğrencinin {problem} notunu düzenle",
+    "overridden": "düzeltildi",
+    "autoScore": "Otomatik: {total} testin {passed} tanesi geçti",
+    "score": "Puan",
+    "outOf": "üzerinden",
+    "feedback": "Geri bildirim",
+    "revertToAuto": "otomatiğe döndür",
+    "assignments": "Kime hangi sorular düştü",
+    "assignmentsHelp": "Bu sınav öğrenci başına {count} soruyu rastgele dağıtır. Bir öğrenci kâğıdını sorguladığında denetlenebilsin diye saklanır.",
+    "noAssignments": "Sınavı henüz kimse açmadı, dolayısıyla dağıtım yapılmadı."
+  },
+  "archive": {
+    "title": "Tarama arşivi",
+    "subtitle": "Sonraki dönemlerle karşılaştırmak için saklanan bitmiş dersler.",
+    "explainer": "Bir sınıfı kendi içinde taramak, önceki yıldan devralınan bir çözümü göremez — o cevap, bu yılın sınıf arkadaşlarının yanında sıradan görünür. Biten bir dersi arşivlemek gönderimlerini saklar, böylece sonraki dönem bu derse karşı kontrol edilebilir. Arşiv yalnızca sizindir ve öğrencilere hiçbir zaman gösterilmez.",
+    "empty": "Henüz arşivlenmiş bir şey yok. Dersler sayfasından biten bir dersi arşivleyin.",
+    "cohort": "Dönem",
+    "problems": "Soru",
+    "submissions": "Gönderim",
+    "archivedAt": "Arşivlendi",
+    "deleteNamed": "{label} arşivini sil",
+    "confirmDelete": "“{label}” ve ona ait {count} arşivlenmiş gönderim silinsin mi? Sonraki taramalar artık bu dönemle karşılaştırmayacak.",
+    "deleted": "“{label}” arşivinden {count} gönderim silindi."
+  },
+  "mySubmissions": {
+    "title": "Gönderimlerim",
+    "subtitle": "Son 100 gönderiminiz, en yeniden eskiye.",
+    "empty": "Henüz hiçbir gönderim yapmadınız.",
+    "status": {
+      "completed": "Tamamlandı",
+      "queued": "Sırada",
+      "running": "Değerlendiriliyor",
+      "error": "Hata"
+    }
+  },
+  "studentDetail": {
+    "back": "← Öğrenciler",
+    "recentWork": "Son çalışmalar",
+    "scopeNote": "Yalnızca kendi derslerinizdeki gönderimler."
   }
 }

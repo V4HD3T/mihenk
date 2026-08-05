@@ -6,6 +6,9 @@
  * and the result is English text appearing mid-sentence in a Turkish interface.
  */
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -69,6 +72,42 @@ describe('translation catalogues', () => {
       return !allowed.has(key) && e === t && /[a-zA-Z]{4,}/.test(e);
     });
     expect(identical).toEqual([]);
+  });
+
+  /**
+   * A key that exists in no catalogue renders as the key itself — ugly, but
+   * only if someone happens to open that page in that state. With 349 keys
+   * across 25 components a typo is the likeliest way to ship one, so the
+   * source is scanned for literal `t('...')` calls and every one is resolved.
+   *
+   * Only literal keys can be checked; the handful built by interpolation
+   * (`t(`teacher.difficultyValue.${p.difficulty}`)`) are covered by the tests
+   * that render those components.
+   */
+  it('every key used in the source exists in the catalogue', () => {
+    const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
+    const files = [];
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const child = join(dir, entry.name);
+        if (entry.isDirectory()) walk(child);
+        else if (/\.jsx?$/.test(entry.name)) files.push(child);
+      }
+    };
+    walk(srcDir);
+    // A guard on the guard: a walk that silently found nothing would make this
+    // test pass for the wrong reason.
+    expect(files.length).toBeGreaterThan(20);
+
+    const known = new Set(keysOf(en));
+    const missing = [];
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      for (const [, key] of source.matchAll(/\bt\(\s*'([a-zA-Z0-9_.]+)'/g)) {
+        if (!known.has(key)) missing.push(`${key} (${relative(srcDir, file)})`);
+      }
+    }
+    expect(missing).toEqual([]);
   });
 
   it('placeholders survive translation', () => {

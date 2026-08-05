@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import { useI18n, useT } from '../i18n/index.jsx';
 import { dateLocale } from '../i18n/format.js';
@@ -41,7 +42,11 @@ export default function StudentsPage() {
             <tbody>
               {students.map((s) => (
                 <tr key={s.id} className="border-t border-line">
-                  <td className="p-3 font-medium">{s.name}</td>
+                  <td className="p-3 font-medium">
+                    <Link to={`/students/${s.id}`} className="hover:text-primary transition-colors">
+                      {s.name}
+                    </Link>
+                  </td>
                   <td className="p-3 font-mono text-xs text-inkmuted">{s.email}</td>
                   <td className="p-3 font-mono">{s.submission_count}</td>
                   <td className="p-3 font-mono">{s.solved_count}</td>

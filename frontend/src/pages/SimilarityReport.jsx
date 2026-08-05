@@ -10,6 +10,7 @@ export default function SimilarityReport() {
   const [problemTitle, setProblemTitle] = useState('');
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [archive, setArchive] = useState(null);
   const [selectedPair, setSelectedPair] = useState(null);
   const [comparison, setComparison] = useState(null);
   const [comparing, setComparing] = useState(false);
@@ -20,6 +21,12 @@ export default function SimilarityReport() {
       .get(`/integrity/problem/${id}/similarity`)
       .then(({ data }) => setGroups(data.groups))
       .finally(() => setLoading(false));
+    // Screening against previous cohorts, which is a separate question from
+    // screening the class against itself and uses a different threshold.
+    api
+      .get(`/integrity/problem/${id}/archive-matches`)
+      .then(({ data }) => setArchive(data))
+      .catch(() => setArchive(null));
   }, [id]);
 
   const openPair = async (pair) => {
@@ -47,6 +54,47 @@ export default function SimilarityReport() {
         <span className="text-warning font-medium">{t('similarity.disclaimerNotable')}</span>
         {t('similarity.disclaimerAfter')}
       </div>
+
+      {/* Reuse from a previous cohort, which the class-relative report cannot
+          see: if last year's solution is passed round, it looks unremarkable
+          against this year's classmates. */}
+      {archive && archive.archiveSize > 0 && (
+        <section className="mb-10">
+          <h2 className="font-display text-lg font-medium mb-1">{t('similarity.archiveTitle')}</h2>
+          <p className="text-xs text-inkmuted mb-3">
+            {t('similarity.archiveNote', {
+              size: archive.archiveSize,
+              threshold: archive.threshold,
+            })}
+          </p>
+          {archive.matches.length === 0 ? (
+            <p className="text-sm text-inkmuted">{t('similarity.archiveNoMatches')}</p>
+          ) : (
+            <div className="border border-line rounded-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-ink/5 text-left">
+                    <th className="p-3 font-medium">{t('exam.student')}</th>
+                    <th className="p-3 font-medium">{t('similarity.similarity')}</th>
+                    <th className="p-3 font-medium">{t('similarity.archivedFrom')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {archive.matches.map((m, i) => (
+                    <tr key={`${m.submissionId}-${i}`} className="border-t border-line">
+                      <td className="p-3">{m.userName}</td>
+                      <td className="p-3 font-mono text-warning font-medium">{m.similarity}%</td>
+                      <td className="p-3 text-xs text-inkmuted">
+                        {m.archivedFrom} · {m.archivedProblem} · {m.archivedStudent}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {loading ? (
         <p className="text-inkmuted">{t('common.loading')}</p>

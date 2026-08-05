@@ -15,7 +15,9 @@
     "logOut": "Log out",
     "language": "Language",
     "brand": "CodeCloud",
-    "main": "Main"
+    "main": "Main",
+    "mySubmissions": "My Submissions",
+    "archive": "Archive"
   },
   "languages": {
     "python": "Python",
@@ -78,7 +80,8 @@
     "featureGrading": "AUTOMATIC GRADING",
     "featureAnalytics": "ANALYTICS",
     "loginFailed": "Sign-in failed",
-    "registerFailed": "Registration failed"
+    "registerFailed": "Registration failed",
+    "forgotSent": "If that address has an account, a reset link is on its way."
   },
   "courses": {
     "title": "Courses",
@@ -111,7 +114,16 @@
     "loadFailed": "Failed to load courses",
     "joinFailed": "Could not join that course",
     "createFailed": "Could not create the course",
-    "regenerateFailed": "Could not regenerate the code"
+    "regenerateFailed": "Could not regenerate the code",
+    "updateFailed": "Could not save the course",
+    "editNamed": "Edit {course}",
+    "archiveCourse": "Archive this course",
+    "archiveHelp": "An archived course stops accepting new students. Its existing content and roster are untouched.",
+    "archiveForScreening": "keep for screening",
+    "archiveNamed": "Keep {course} for screening future cohorts",
+    "confirmArchiveForScreening": "Copy the latest submissions from “{course}” into your screening archive? Future cohorts can then be compared against this one.",
+    "archivedForScreening": "{count} submissions archived as “{label}”.",
+    "archiveFailed": "Could not archive the course"
   },
   "roster": {
     "back": "← Courses",
@@ -234,7 +246,25 @@
     "deleteProblemNamed": "Delete problem {title}",
     "confirmDeleteProblem": "Delete \"{title}\"? This also removes its submissions.",
     "examMeta": "{problems} problems · {participants} participants · {start}",
-    "viewResults": "view results →"
+    "viewResults": "view results →",
+    "edit": "edit",
+    "editProblemHeading": "Editing “{title}”",
+    "editProblemNamed": "Edit problem {title}",
+    "saveChanges": "Save changes",
+    "updateProblemFailed": "Failed to save the problem",
+    "timeLimit": "Time limit (s)",
+    "memoryLimit": "Memory limit (MB)",
+    "serverDefault": "server default",
+    "hidden": "hidden",
+    "deleteTestNamed": "Delete test {number}",
+    "testCasesSaveImmediately": "Test cases are saved as soon as you add or remove one — they are not part of the Save above.",
+    "expectedOutputRequired": "Expected output is required.",
+    "lastTestCase": "A problem needs at least one test case, or it can never be graded.",
+    "randomisePool": "Give each student a random subset of these problems",
+    "problemsPerStudent": "Problems per student",
+    "randomiseHelp": "Each student is dealt {perStudent} of the {total} selected problems, at random, the first time they open the exam. The deal is recorded so a reload shows the same paper.",
+    "randomisedBadge": "{count} per student",
+    "manage": "manage"
   },
   "students": {
     "title": "Students",
@@ -309,6 +339,62 @@
     "viewSideBySide": "view side-by-side →",
     "comparePair": "Compare {a} and {b} side by side",
     "close": "close ✕",
-    "comparing": "Comparing…"
+    "comparing": "Comparing…",
+    "archiveTitle": "Matches against previous cohorts",
+    "archiveNote": "Screened against {size} archived submissions. Only pairs at or above {threshold}% of both submissions are listed — the archive has no class baseline to calibrate against, so the bar is deliberately high.",
+    "archiveNoMatches": "No submission resembles an archived one closely enough to list.",
+    "archivedFrom": "Archived source"
+  },
+  "examAdmin": {
+    "back": "← Dashboard",
+    "accommodations": "Extra time",
+    "accommodationsHelp": "Minutes added to this student's deadline for this exam only. 0 removes the grant. The countdown, the submission window and the integrity logging all follow the extended deadline.",
+    "extraMinutes": "Extra minutes",
+    "extraMinutesFor": "Extra minutes for {name}",
+    "note": "Note",
+    "noteFor": "Note for {name}",
+    "notePlaceholder": "Why, for your own records",
+    "saveExtraTimeFor": "Save extra time for {name}",
+    "grades": "Grades",
+    "gradesHelp": "An override replaces the automatic mark for one student on one problem. The automatic result is kept and shown beside it.",
+    "editGradeFor": "Edit {name}'s grade for {problem}",
+    "overridden": "overridden",
+    "autoScore": "Automatic: {passed} of {total} tests passed",
+    "score": "Score",
+    "outOf": "out of",
+    "feedback": "Feedback",
+    "revertToAuto": "revert to automatic",
+    "assignments": "Who was dealt what",
+    "assignmentsHelp": "This exam deals {count} problems per student at random. Kept so a paper can be audited if a student questions theirs.",
+    "noAssignments": "Nobody has opened this exam yet, so nothing has been dealt."
+  },
+  "archive": {
+    "title": "Screening archive",
+    "subtitle": "Finished cohorts kept for comparison against future ones.",
+    "explainer": "Screening a class against itself cannot see a solution handed down from a previous year — that answer looks unremarkable next to this year's classmates. Archiving a finished course keeps its submissions so the next cohort can be checked against it. The archive is yours alone and is never shown to students.",
+    "empty": "Nothing archived yet. Archive a finished course from the Courses page.",
+    "cohort": "Cohort",
+    "problems": "Problems",
+    "submissions": "Submissions",
+    "archivedAt": "Archived",
+    "deleteNamed": "Delete the archived cohort {label}",
+    "confirmDelete": "Delete “{label}” and its {count} archived submissions? Future screening will no longer compare against it.",
+    "deleted": "Deleted {count} archived submissions from “{label}”."
+  },
+  "mySubmissions": {
+    "title": "My Submissions",
+    "subtitle": "Your last 100 submissions, newest first.",
+    "empty": "You have not submitted anything yet.",
+    "status": {
+      "completed": "Completed",
+      "queued": "Queued",
+      "running": "Grading",
+      "error": "Error"
+    }
+  },
+  "studentDetail": {
+    "back": "← Students",
+    "recentWork": "Recent work",
+    "scopeNote": "Submissions in your own courses only."
   }
 }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useT } from '../i18n/index.jsx';
+import CourseEditor from '../components/teacher/CourseEditor.jsx';
 
 /**
  * Courses page.
@@ -24,6 +25,7 @@ export default function Courses() {
   const [joinCode, setJoinCode] = useState('');
   const [newCourse, setNewCourse] = useState({ title: '', description: '', term: '' });
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +70,21 @@ export default function Courses() {
       setError(err.response?.data?.error || t('courses.createFailed'));
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Copies the course's latest submissions into the teacher's private archive,
+  // so next year's cohort can be screened against this one. Irreversible in the
+  // sense that it duplicates code out of the course, hence the confirmation.
+  const archive = async (course) => {
+    if (!window.confirm(t('courses.confirmArchiveForScreening', { course: course.title }))) return;
+    setError('');
+    setNotice('');
+    try {
+      const { data } = await api.post(`/integrity/archive/course/${course.id}`);
+      setNotice(t('courses.archivedForScreening', { count: data.archived, label: data.sourceLabel }));
+    } catch (err) {
+      setError(err.response?.data?.error || t('courses.archiveFailed'));
     }
   };
 
@@ -216,12 +233,40 @@ export default function Courses() {
               )}
 
               {isTeacher && (
-                <Link
-                  to={`/courses/${c.id}/roster`}
-                  className="inline-block mt-4 text-sm text-primary font-medium hover:underline"
-                >
-                  {t('courses.viewRoster')}
-                </Link>
+                <div className="mt-4 flex flex-wrap items-center gap-4">
+                  <Link
+                    to={`/courses/${c.id}/roster`}
+                    className="text-sm text-primary font-medium hover:underline"
+                  >
+                    {t('courses.viewRoster')}
+                  </Link>
+                  <button
+                    onClick={() => setEditing(editing === c.id ? null : c.id)}
+                    aria-expanded={editing === c.id}
+                    aria-label={t('courses.editNamed', { course: c.title })}
+                    className="text-sm text-primary font-medium hover:underline"
+                  >
+                    {t('teacher.edit')}
+                  </button>
+                  <button
+                    onClick={() => archive(c)}
+                    aria-label={t('courses.archiveNamed', { course: c.title })}
+                    className="text-sm text-warning font-medium hover:underline"
+                  >
+                    {t('courses.archiveForScreening')}
+                  </button>
+                </div>
+              )}
+
+              {isTeacher && editing === c.id && (
+                <CourseEditor
+                  course={c}
+                  onSaved={() => {
+                    setEditing(null);
+                    load();
+                  }}
+                  onCancel={() => setEditing(null)}
+                />
               )}
             </div>
           ))}

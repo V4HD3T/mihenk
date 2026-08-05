@@ -2,6 +2,97 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.0] - Teacher Control
+
+The audit that produced v0.1.2 turned up something other than bugs: the backend
+was roughly a release ahead of the interface. Extra time, grade overrides,
+randomised exam pools, the cross-semester archive and problem editing were all
+built, tested and documented, and all of them were reachable only with curl.
+Four of them were listed as shipped features. This release is almost entirely
+frontend — it adds no endpoints, because the endpoints were already there.
+
+### Added
+- **Editing a problem.** `PUT /api/problems/:id` had existed since v0.0.1 with
+  nothing calling it, so correcting a typo in a title meant deleting the
+  problem and writing it again — which deleted every submission against it.
+  Test cases are managed separately when editing, through their own endpoints,
+  and the form says so: they save the moment you add or remove one, rather than
+  on Save with the rest.
+- **Extra time.** Minutes added to one student's deadline for one exam. The
+  countdown, the submission window and the integrity logging already honoured
+  an accommodation everywhere; there was simply no way to grant one.
+- **Grade overrides**, with the automatic result kept on screen beside the mark
+  being changed, and a revert back to it.
+- **Randomised exam pools.** `problems_per_student` has dealt each student a
+  random subset since v0.0.6. The exam form never sent the field, so no exam
+  ever used it. The control appears once more than one problem is selected,
+  since it means nothing otherwise.
+- **The deal, auditable.** Who was given which problems, for when a student
+  questions their paper.
+- **The screening archive.** Keeping a finished course for comparison against
+  future cohorts, listing what is kept, and deleting a cohort. The similarity
+  report now also shows matches against previous years, which the class-relative
+  report cannot see: a solution handed down from last year looks unremarkable
+  beside this year's classmates.
+- **Course editing and archiving.** The archived badge has been rendered on the
+  course card since v0.0.5, with nothing able to set the flag it displayed.
+- **A student's own submission history**, and a **student detail page** for
+  teachers, linked from the student list.
+
+### Changed
+- **Routes are code-split.** This release roughly doubled the amount of
+  interface, and the whole application was one chunk that every visitor
+  downloaded before seeing a login form — including the charting library and
+  the teacher's administration screens, which a signed-out visitor cannot
+  reach. The entry chunk drops from **739.83 kB to 258.25 kB** (gzip 212.58 kB
+  to 87.44 kB); Recharts now sits in the Analytics chunk, fetched on the way to
+  that page.
+- The teacher panel is split into components rather than one 570-line file,
+  which is also what let the forms be shared between creating and editing.
+- The course editor carries an accessible name. Several course cards can each
+  have an editor open, and the create form above them has identically labelled
+  fields; without a name they are one indistinguishable pile of "Course title".
+
+### Fixed
+- **`auth.forgotSent` existed in no catalogue.** The forgot-password page shows
+  it when the request fails, so a network error rendered the literal string
+  `auth.forgotSent` where a sentence belonged — and, since the success path
+  shows a proper message, made a failure visibly different from a success on
+  the one page whose entire design is that they look identical. Found by the
+  new key test, not by reading.
+- Heading order on the teacher panel went `h1` to `h3` again after the forms
+  were extracted into components — the same defect v0.1.1 fixed, reintroduced
+  by moving the code. Caught by the axe test that v0.1.1 added.
+
+### Verified
+50 frontend tests (was 34) and 207 backend tests, both lint suites clean, 7/7
+sandbox containment checks, production build green, `npm ci` clean in both
+packages.
+
+Every new behaviour was mutation-tested: sending a partial body on save,
+dropping `problems_per_student` from the request, saving an accommodation
+without its note, allowing the last test case to be deleted, and misspelling a
+translation key were each introduced deliberately and the suite watched to
+fail. Six mutations, six catches. The tests assert on the request the page
+sends, because a page that renders a form and posts nothing is exactly what
+this release existed to fix and would have looked finished in a screenshot.
+
+A new test resolves every literal `t('...')` key in the source against the
+catalogue. With 350 keys across 29 components, a typo renders the key itself on
+screen, and that is how `auth.forgotSent` had survived.
+
+### Known limitations
+- `POST /api/auth/resend-verification` is still unreachable. Offering the
+  button needs to know whether the address is unverified, and the JWT payload
+  carries only `{ id, name, email, role }` — so doing it properly means the
+  server exposing verification status, which is a backend change rather than
+  the wiring-up this release is. An unconditional button would be noise for
+  everyone already verified.
+- Exam problems cannot be reordered, and per-problem points are still divided
+  evenly rather than set by hand.
+- The archive screens on a fixed 70% threshold with no way to tune it per
+  problem.
+
 ## [0.1.2] - Exam Integrity
 
 An audit of the API turned up the defect this project most needed not to have:

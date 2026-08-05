@@ -64,6 +64,7 @@ export default function Navbar() {
                 <NavItem to="/">{t('nav.problems')}</NavItem>
                 <NavItem to="/courses">{t('nav.courses')}</NavItem>
                 <NavItem to="/my-exams">{t('nav.myExams')}</NavItem>
+                <NavItem to="/my-submissions">{t('nav.mySubmissions')}</NavItem>
                 <NavItem to="/analytics">{t('nav.myProgress')}</NavItem>
               </>
             )}
@@ -72,6 +73,7 @@ export default function Navbar() {
                 <NavItem to="/">{t('nav.dashboard')}</NavItem>
                 <NavItem to="/courses">{t('nav.courses')}</NavItem>
                 <NavItem to="/students">{t('nav.students')}</NavItem>
+                <NavItem to="/teacher/archive">{t('nav.archive')}</NavItem>
                 <NavItem to="/analytics">{t('nav.analytics')}</NavItem>
               </>
             )}
