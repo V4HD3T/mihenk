@@ -72,6 +72,10 @@ const schema = z.object({
   // Consecutive quiet ticks before shrinking, so a lull between two waves of
   // submissions doesn't cost the startup time of rebuilding the pool.
   WORKER_POOL_SCALE_DOWN_TICKS: numeric(6),
+  // Where the grading side exposes /metrics. The pool aggregates its children
+  // and serves one endpoint here; a worker started on its own serves its own.
+  // Like the API's, it does not exist at all without METRICS_TOKEN.
+  WORKER_METRICS_PORT: numeric(4001),
   // How long POST /api/submissions waits for Redis to accept a grading job
   // before giving up. Without a bound, a Redis outage hangs the request.
   QUEUE_ENQUEUE_TIMEOUT_MS: numeric(5000),

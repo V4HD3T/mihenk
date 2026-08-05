@@ -1,7 +1,7 @@
 # CodeCloud
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 0.1.1**
+**Version 1.0.0**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
@@ -14,6 +14,7 @@ on top.
 
 - **`backend/`** — Node.js/Express API, PostgreSQL, multi-language code execution engine. See `backend/README.md`.
 - **`frontend/`** — React (Vite) interface, Monaco code editor. See `frontend/README.md`.
+- **`ops/`** — Prometheus scrape config and alerting rules, Grafana dashboard and provisioning.
 
 ## Deploy it
 
@@ -29,6 +30,27 @@ DB_HOST=127.0.0.1 REDIS_HOST=127.0.0.1 SANDBOX_MODE=docker npm run worker:pool
 
 Backups: `./scripts/backup.sh`. Restore: `./scripts/restore.sh <file>`.
 Full deployment, TLS and upgrade notes are in `backend/README.md`.
+Upgrade rules and what counts as a breaking change: `VERSIONING.md`.
+
+### Monitoring
+
+```bash
+printf '%s' "$METRICS_TOKEN" > ops/prometheus/metrics-token
+docker compose --profile monitoring up -d      # Grafana on :3000
+```
+
+`/metrics` does not exist at all unless `METRICS_TOKEN` is set — on the API and on the
+grading workers alike. The dashboard and the alerting rules are provisioned from `ops/`,
+and the metric names in them are checked against the application's own registry by
+`backend/tests/observability.test.js`, so a renamed metric fails the build rather than
+quietly emptying a graph.
+
+### API documentation
+
+The OpenAPI 3.1 description is served by any running instance at `/api/openapi.json`, and
+is generated from `backend/src/openapi.js`. It is not trusted to stay true:
+`backend/tests/openapi.test.js` walks the live Express router and fails if the document and
+the application disagree about which endpoints exist, in either direction.
 
 ## Develop it
 
@@ -155,9 +177,10 @@ instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the thr
 a stronger boundary than a shared kernel — gVisor or a Firecracker micro-VM under the container
 layer.
 
-## Changelog
+## Changelog and versioning
 
-See `CHANGELOG.md`.
+Release history is in `CHANGELOG.md`. What each version number commits to, what counts as
+the public interface, and how to upgrade: `VERSIONING.md`.
 
 ## Next steps
 

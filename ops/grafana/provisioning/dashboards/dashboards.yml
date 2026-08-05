@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: codecloud
+    type: file
+    # The dashboard is provisioned from the repository, so edits made in the
+    # Grafana UI are overwritten on restart. Change ops/grafana/dashboard.json
+    # and let the file be the source of truth - the metric names in it are
+    # checked against the application by backend/tests/observability.test.js,
+    # and a dashboard edited only in the browser escapes that check.
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

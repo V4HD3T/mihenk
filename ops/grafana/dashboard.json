@@ -1,0 +1,287 @@
+{
+  "uid": "codecloud-overview",
+  "title": "CodeCloud — Grading and API",
+  "description": "The questions asked while an exam is running: is grading keeping up, is anything being lost, and is the API healthy. Panels are ordered so the top row answers 'should I be worried' without scrolling.",
+  "tags": ["codecloud"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "hide": 0,
+        "label": "Data source"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Waiting to be graded",
+      "description": "Submissions queued but not yet picked up. A burst at the start of an exam is normal; a number that only grows is not.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 50 },
+              { "color": "red", "value": 200 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(codecloud_queue_depth{state=\"waiting\"})",
+          "legendFormat": "waiting"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Queue wait (p95)",
+      "description": "What a student experiences: time between pressing Submit and a worker starting. This, not grading duration, is the number that feels broken.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 10 },
+              { "color": "red", "value": 30 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(codecloud_queue_wait_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Workers running",
+      "description": "Zero means submissions are still being accepted and queued while nothing grades them.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "sum(codecloud_worker_pool_size)", "legendFormat": "workers" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Submissions lost to the queue",
+      "description": "Accepted by the API and never queued — usually Redis unreachable. Anything above zero means students were told to submit again.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(codecloud_enqueue_failures_total[1h]))",
+          "legendFormat": "last hour"
+        }
+      ]
+    },
+
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Queue depth by state",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(codecloud_queue_depth) by (state)",
+          "legendFormat": "{{state}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Submissions per minute by language",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(codecloud_submissions_total[5m])) by (language) * 60",
+          "legendFormat": "{{language}}"
+        }
+      ]
+    },
+
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Grading duration by language (p95)",
+      "description": "Compiling Java or Go dominates the tail, so the languages are expected to differ by a lot.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(codecloud_grading_duration_seconds_bucket[5m])) by (le, language))",
+          "legendFormat": "{{language}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Verdicts per minute",
+      "description": "wrong_answer is students being wrong and is not a problem. A rise in runtime_error or time_limit_exceeded across everyone usually means the problem's limits are wrong, not the code.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(codecloud_verdicts_total[5m])) by (verdict) * 60",
+          "legendFormat": "{{verdict}}"
+        }
+      ]
+    },
+
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Grading failures",
+      "description": "Jobs that threw rather than producing a verdict. Distinct from a submission that was graded and found wrong — this is infrastructure.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 21 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(codecloud_grading_failures_total[5m])) * 60",
+          "legendFormat": "failures/min"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "API latency by route (p95)",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 21 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(8, histogram_quantile(0.95, sum(rate(codecloud_http_request_duration_seconds_bucket[5m])) by (le, route)))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "HTTP responses by status",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 21 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(codecloud_http_request_duration_seconds_count[5m])) by (status) * 60",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Database pool",
+      "description": "`waiting` above zero means requests are queueing for a connection.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 28 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(codecloud_db_pool_connections) by (state)",
+          "legendFormat": "{{state}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Event loop lag (p99)",
+      "description": "The first thing to look at when the app is slow but nothing is obviously broken.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "codecloud_nodejs_eventloop_lag_p99_seconds",
+          "legendFormat": "{{role}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Resident memory by process",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "codecloud_process_resident_memory_bytes",
+          "legendFormat": "{{role}}"
+        }
+      ]
+    }
+  ]
+}

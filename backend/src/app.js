@@ -25,6 +25,7 @@ const coursesRoutes = require('./routes/courses.routes');
 const draftsRoutes = require('./routes/drafts.routes');
 const logger = require('./logger');
 const metrics = require('./metrics');
+const openapi = require('./openapi');
 const { config } = require('./config/env');
 
 /**
@@ -101,6 +102,13 @@ function createApp(envOverrides = {}) {
 
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', service: 'codecloud-backend', time: new Date().toISOString() });
+  });
+
+  // The API's own description. Unauthenticated on purpose: it documents the
+  // shape of the interface, not any data, and a client that cannot read it
+  // before signing in cannot use it to sign in.
+  app.get('/api/openapi.json', (req, res) => {
+    res.json(openapi.document);
   });
 
   // Prometheus scrape endpoint.

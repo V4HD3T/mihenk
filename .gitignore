@@ -8,3 +8,7 @@ coverage/
 # Deployment
 .env
 backups/
+
+# The bearer credential Prometheus uses to scrape /metrics. Written from
+# METRICS_TOKEN at deploy time; committing it would publish the token.
+ops/prometheus/metrics-token

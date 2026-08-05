@@ -1,0 +1,129 @@
+# Alerting rules for CodeCloud.
+#
+# These are written for the question actually asked during an exam: is grading
+# keeping up, and is anything being lost? Every rule here should be one a person
+# would get out of bed for, or it should be a dashboard panel instead. Rules
+# that fire on things nobody acts on are how alerting stops being read.
+#
+# Metric names are checked against the application's own registry by
+# backend/tests/observability.test.js, so a renamed metric breaks the build
+# rather than silently disabling an alert.
+
+groups:
+  - name: codecloud-availability
+    rules:
+      - alert: CodeCloudAPIDown
+        expr: up{job="codecloud-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'The API is not being scraped'
+          description: >-
+            Prometheus cannot reach the API. If this is real rather than a
+            scrape problem, nobody can sign in or submit.
+
+      - alert: CodeCloudNoWorkers
+        expr: sum(codecloud_worker_pool_size) == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'No grading workers are running'
+          description: >-
+            Submissions are still accepted and queued, so students see "queued"
+            and nothing else happens. Start the worker pool.
+
+  - name: codecloud-grading
+    rules:
+      # The queue draining slower than it fills. Sustained, not a spike: a burst
+      # at the start of an exam is normal and clears itself.
+      - alert: CodeCloudQueueBacklog
+        expr: sum(codecloud_queue_depth{state="waiting"}) > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Grading backlog above 50 for five minutes'
+          description: >-
+            {{ $value | printf "%.0f" }} submissions are waiting. Either the
+            worker pool is too small for this exam or grading has stalled.
+
+      # What a student actually experiences. Grading duration can be long
+      # without anyone minding; waiting to *start* is the part that feels broken.
+      - alert: CodeCloudSlowQueueWait
+        expr: >-
+          histogram_quantile(
+            0.95,
+            sum(rate(codecloud_queue_wait_seconds_bucket[5m])) by (le)
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Submissions waiting over 30s at p95'
+          description: >-
+            One submission in twenty waits more than 30 seconds before a worker
+            picks it up.
+
+      # An infrastructure failure, not a wrong answer: the job threw rather than
+      # producing a verdict, so the student's result is an error they cannot fix.
+      - alert: CodeCloudGradingFailures
+        expr: sum(rate(codecloud_grading_failures_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Grading jobs are failing outright'
+          description: >-
+            Jobs are throwing instead of returning a verdict. Check the sandbox
+            images are built and the Docker daemon is reachable from the workers.
+
+      # The one that loses work. The submission was written to the database and
+      # nothing will ever grade it, so a student may believe they submitted.
+      - alert: CodeCloudEnqueueFailures
+        expr: sum(rate(codecloud_enqueue_failures_total[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Submissions cannot be queued'
+          description: >-
+            The API accepted a submission but could not queue it, which usually
+            means Redis is unreachable. Students are being told to try again.
+
+  - name: codecloud-resources
+    rules:
+      - alert: CodeCloudDBPoolSaturated
+        expr: sum(codecloud_db_pool_connections{state="waiting"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Requests are queueing for a database connection'
+          description: >-
+            Every pooled connection is busy and requests are waiting. Raise
+            DB_POOL_MAX, or find the slow query holding them.
+
+      - alert: CodeCloudEventLoopBlocked
+        expr: max(codecloud_nodejs_eventloop_lag_p99_seconds) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Event loop lag above one second at p99'
+          description: >-
+            Something synchronous is blocking the process. Requests that look
+            unrelated will time out.
+
+      - alert: CodeCloudAPIErrors
+        expr: >-
+          sum(rate(codecloud_http_request_duration_seconds_count{status=~"5.."}[5m]))
+          /
+          sum(rate(codecloud_http_request_duration_seconds_count[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 5% of requests are returning 5xx'

@@ -2,6 +2,84 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.0.0] - Documented and Observable
+
+The last three releases closed the functional gaps. This one closes the gap
+between what the system does and what anyone outside it can find out: the API is
+described, the metrics are reachable, and the version number now means something
+specific.
+
+Writing the dashboard is what exposed the release's largest defect. The workers
+had been instrumented since v0.0.8 and nothing could read any of it.
+
+### Added
+- **An OpenAPI 3.1 description of every endpoint**, served at
+  `/api/openapi.json`. All 54 routes, with the two rules that run through the
+  whole API — course scoping, and the exam seal — stated once in the
+  introduction rather than repeated per path.
+
+  It is not trusted to stay true. A test walks the live Express router and fails
+  if the document and the application disagree about which endpoints exist, **in
+  either direction**: an undocumented route fails, and so does a documented one
+  that no longer exists. The second is the worse failure, because it sends a
+  reader to write code against a 404.
+- **A Grafana dashboard and Prometheus alerting rules**, provisioned from `ops/`
+  and wired into `docker compose --profile monitoring`. Eight alerts, each one
+  written for something a person would act on: the queue backing up, submissions
+  waiting too long to start, grading jobs throwing, submissions that could not be
+  queued at all, no workers running, the database pool saturated, the event loop
+  blocked, and 5xx above 5%.
+- **`VERSIONING.md`** — what counts as the public interface, what each number
+  means, how to upgrade, and what is explicitly not covered (no backports, no
+  downgrades, no supported multi-host scale-out).
+
+### Fixed
+- **The grading workers exposed no metrics at all.** Every counter they keep —
+  grading duration, queue wait, verdicts, grading failures — was written to a
+  registry inside a forked process with nothing able to read it, and
+  `codecloud_worker_pool_size` was a gauge that no code anywhere ever set,
+  because `workerPool.js` did not import the metrics module.
+
+  Half the instrumentation existed and none of it was reachable, which is worse
+  than not having it: a dashboard built on those series draws empty graphs, and
+  an empty graph reads as "nothing is happening" rather than "this is not wired
+  up". Found by writing the dashboard and asking where each series would come
+  from.
+
+  Workers now answer the pool over IPC and the pool serves one aggregated
+  endpoint, so N workers do not contend for a port. A worker started on its own
+  serves its own. Both are fail-closed in the same way the API already was:
+  without `METRICS_TOKEN` there is no listener, not an open one.
+
+### Verified
+235 backend tests (was 207) and 50 frontend tests, both lint suites clean, 7/7
+sandbox containment checks against real containers, production build green,
+`docker compose --profile monitoring config` valid.
+
+The aggregation is tested with real forked children and a real HTTP request —
+the thing under test is the IPC and the socket, and mocking either would only
+test the mock. Mutation-tested as usual: undocumenting an endpoint, documenting
+one that does not exist, breaking the route-table reconstruction, adding a route
+without documenting it, renaming a metric out from under the dashboard, removing
+an alert's `for:`, unbalancing a PromQL expression, misspelling a PromQL
+function, dropping the pool-size gauge, ignoring the children's metrics, and
+disabling the token check were each introduced deliberately and the suite
+watched to fail. Fourteen mutations, fourteen catches.
+
+### Known limitations
+- The alerting rules were **not** validated by `promtool` itself — the image
+  would not finish pulling here. They are checked structurally, every metric
+  name is resolved against the application's registry, and the expressions are
+  checked for balanced brackets and known function names, but a PromQL subtlety
+  those three miss would surface when Prometheus loads the rules. Run
+  `promtool check rules ops/prometheus/alerts.yml` before relying on them.
+- The dashboard assumes one API instance and one worker pool on one host, which
+  is the deployment the compose file describes.
+- `POST /api/auth/resend-verification` is documented but still has no interface,
+  for the reason given in v0.2.0.
+- Alert thresholds are guesses calibrated to a single-host install with a class
+  of a few hundred. They are the first thing to tune against a real exam.
+
 ## [0.2.0] - Teacher Control
 
 The audit that produced v0.1.2 turned up something other than bugs: the backend

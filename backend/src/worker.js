@@ -21,10 +21,35 @@ const { runTestCases } = require('./services/codeExecution.service');
 const logger = require('./logger');
 const { config } = require('./config/env');
 const metrics = require('./metrics');
+const { startMetricsServer } = require('./metricsServer');
 
 const CONCURRENCY = config().WORKER_CONCURRENCY;
 
 metrics.init(`worker-${process.pid}`);
+
+/**
+ * How this worker's metrics get out.
+ *
+ * Under the pool this process is a fork, so it answers the supervisor over IPC
+ * and the supervisor serves one aggregated endpoint - N workers must not each
+ * try to bind the same port. Started on its own (`npm run worker`) there is no
+ * supervisor, so it serves its own.
+ */
+if (process.send) {
+  process.on('message', async (message) => {
+    if (message?.type !== 'metrics-request') return;
+    process.send({
+      type: 'metrics-response',
+      id: message.id,
+      metrics: await metrics.register.getMetricsAsJSON(),
+    });
+  });
+} else {
+  startMetricsServer({
+    port: config().WORKER_METRICS_PORT,
+    collect: () => metrics.register.metrics(),
+  });
+}
 
 async function gradeSubmission(job) {
   const { submissionId } = job.data;

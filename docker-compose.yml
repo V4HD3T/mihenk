@@ -144,6 +144,54 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/codecloud/exec:/var/lib/codecloud/exec
 
+  # Monitoring. Opt-in, because a single-host install that nobody watches does
+  # not need two more processes:
+  #
+  #   printf '%s' "$METRICS_TOKEN" > ops/prometheus/metrics-token
+  #   docker compose --profile monitoring up -d
+  #
+  # Grafana comes up on :3000 with the dashboard already provisioned. The token
+  # file is read by Prometheus as a bearer credential; /metrics does not exist
+  # at all unless METRICS_TOKEN is set, on the API and the workers alike.
+  prometheus:
+    profiles: ['monitoring']
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    depends_on:
+      - api
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./ops/prometheus/metrics-token:/etc/prometheus/metrics-token:ro
+      - prometheus-data:/prometheus
+    # The default layout runs the grading workers on the host, so their
+    # aggregated metrics endpoint is reached through the host gateway.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '127.0.0.1:${PROMETHEUS_PORT:-9090}:9090'
+
+  grafana:
+    profiles: ['monitoring']
+    image: grafana/grafana:11.5.1
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD in .env}
+      # Nothing here is public: the dashboard shows queue depth, failure rates
+      # and host statistics.
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboard.json:/var/lib/grafana/dashboards/codecloud.json:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - '127.0.0.1:${GRAFANA_PORT:-3000}:3000'
+
 volumes:
   postgres-data:
   redis-data:
+  prometheus-data:
+  grafana-data:

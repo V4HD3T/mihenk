@@ -21,8 +21,11 @@ require('dotenv').config();
 const { fork } = require('child_process');
 const path = require('path');
 const { Queue } = require('bullmq');
+const client = require('prom-client');
 const createConnection = require('./queue/redis');
 const logger = require('./logger');
+const metrics = require('./metrics');
+const { startMetricsServer } = require('./metricsServer');
 const { config } = require('./config/env');
 
 const env = config();
@@ -57,6 +60,51 @@ class WorkerPool {
     this.quietTicks = 0;
     this.stopping = false;
     this.queue = options.queue || new Queue('grading', { connection: createConnection() });
+    this.nextRequestId = 1;
+  }
+
+  /**
+   * This pool's own metrics, plus every child's.
+   *
+   * The grading counters live in the workers, so the supervisor asks each one
+   * over IPC and merges the replies. A worker that does not answer within the
+   * timeout is left out rather than failing the scrape - one wedged process
+   * should cost one series, not the whole endpoint.
+   */
+  async collectMetrics(timeoutMs = 2000) {
+    metrics.workerPoolSize.set(this.workers.size);
+
+    const replies = await Promise.all(
+      [...this.workers.values()].map(
+        (child) =>
+          new Promise((resolve) => {
+            const id = this.nextRequestId++;
+            const timer = setTimeout(() => {
+              child.off('message', onMessage);
+              resolve(null);
+            }, timeoutMs);
+            const onMessage = (message) => {
+              if (message?.type !== 'metrics-response' || message.id !== id) return;
+              clearTimeout(timer);
+              child.off('message', onMessage);
+              resolve(message.metrics);
+            };
+            child.on('message', onMessage);
+            // The callback catches a closed channel, which `send` reports
+            // asynchronously and a try/catch around it would miss.
+            child.send({ type: 'metrics-request', id }, (err) => {
+              if (!err) return;
+              clearTimeout(timer);
+              child.off('message', onMessage);
+              resolve(null);
+            });
+          })
+      )
+    );
+
+    const own = await metrics.register.getMetricsAsJSON();
+    const registry = client.AggregatorRegistry.aggregate([own, ...replies.filter(Boolean)]);
+    return registry.metrics();
   }
 
   spawnOne() {
@@ -155,8 +203,16 @@ class WorkerPool {
 module.exports = { WorkerPool, desiredWorkers };
 
 if (require.main === module) {
+  metrics.init('worker-pool');
   const pool = new WorkerPool();
   pool.start();
+
+  // One endpoint for the whole grading side. Without this, everything the
+  // workers measure was written to a registry nobody could reach.
+  startMetricsServer({
+    port: env.WORKER_METRICS_PORT,
+    collect: () => pool.collectMetrics(),
+  });
 
   let shuttingDown = false;
   const shutdown = async (signal) => {
