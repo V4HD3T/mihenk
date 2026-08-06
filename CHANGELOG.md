@@ -24,11 +24,11 @@ had been instrumented since v0.0.8 and nothing could read any of it.
   that no longer exists. The second is the worse failure, because it sends a
   reader to write code against a 404.
 - **A Grafana dashboard and Prometheus alerting rules**, provisioned from `ops/`
-  and wired into `docker compose --profile monitoring`. Eight alerts, each one
-  written for something a person would act on: the queue backing up, submissions
-  waiting too long to start, grading jobs throwing, submissions that could not be
-  queued at all, no workers running, the database pool saturated, the event loop
-  blocked, and 5xx above 5%.
+  and wired into `docker compose --profile monitoring`. Nine alerts, each one
+  written for something a person would act on: the API unreachable, no workers
+  running, the queue backing up, submissions waiting too long to start, grading
+  jobs throwing, submissions that could not be queued at all, the database pool
+  saturated, the event loop blocked, and 5xx above 5%.
 - **`VERSIONING.md`** — what counts as the public interface, what each number
   means, how to upgrade, and what is explicitly not covered (no backports, no
   downgrades, no supported multi-host scale-out).
@@ -54,7 +54,9 @@ had been instrumented since v0.0.8 and nothing could read any of it.
 ### Verified
 235 backend tests (was 207) and 50 frontend tests, both lint suites clean, 7/7
 sandbox containment checks against real containers, production build green,
-`docker compose --profile monitoring config` valid.
+`docker compose --profile monitoring config` valid, and both Prometheus files
+checked by `promtool` itself — `SUCCESS: /etc/prometheus/prometheus.yml is valid
+prometheus config file syntax` and `SUCCESS: 9 rules found`.
 
 The aggregation is tested with real forked children and a real HTTP request —
 the thing under test is the IPC and the socket, and mocking either would only
@@ -67,12 +69,9 @@ disabling the token check were each introduced deliberately and the suite
 watched to fail. Fourteen mutations, fourteen catches.
 
 ### Known limitations
-- The alerting rules were **not** validated by `promtool` itself — the image
-  would not finish pulling here. They are checked structurally, every metric
-  name is resolved against the application's registry, and the expressions are
-  checked for balanced brackets and known function names, but a PromQL subtlety
-  those three miss would surface when Prometheus loads the rules. Run
-  `promtool check rules ops/prometheus/alerts.yml` before relying on them.
+- `promtool` validates syntax, not meaning: it confirms the rules parse and the
+  functions exist, and the test suite confirms every metric named is one the
+  application exports. Neither can tell you a threshold is wrong.
 - The dashboard assumes one API instance and one worker pool on one host, which
   is the deployment the compose file describes.
 - `POST /api/auth/resend-verification` is documented but still has no interface,
