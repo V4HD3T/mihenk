@@ -181,8 +181,3 @@ layer.
 
 Release history is in `CHANGELOG.md`. What each version number commits to, what counts as
 the public interface, and how to upgrade: `VERSIONING.md`.
-
-## Next steps
-
-If it's useful, I can also prepare a university-format project report (Word) and presentation
-(PowerPoint) for this project — as with the earlier "Pazaryeri" project.
