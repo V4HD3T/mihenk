@@ -9,15 +9,15 @@ export function AuthProvider({ children }) {
   // fallback messages are translated like everything else the user reads.
   const t = useT();
   const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('codecloud_user');
+    const stored = localStorage.getItem('mihenk_user');
     return stored ? JSON.parse(stored) : null;
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const persist = (user, token) => {
-    localStorage.setItem('codecloud_token', token);
-    localStorage.setItem('codecloud_user', JSON.stringify(user));
+    localStorage.setItem('mihenk_token', token);
+    localStorage.setItem('mihenk_user', JSON.stringify(user));
     setUser(user);
   };
 
@@ -59,8 +59,8 @@ export function AuthProvider({ children }) {
   }, [t]);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('codecloud_token');
-    localStorage.removeItem('codecloud_user');
+    localStorage.removeItem('mihenk_token');
+    localStorage.removeItem('mihenk_user');
     setUser(null);
   }, []);
 

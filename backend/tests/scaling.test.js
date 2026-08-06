@@ -62,7 +62,7 @@ describe('metrics endpoint', () => {
       .set('Authorization', 'Bearer right');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/plain/);
-    expect(res.text).toMatch(/codecloud_/);
+    expect(res.text).toMatch(/mihenk_/);
   });
 
   it('does not count itself as an API route with unbounded cardinality', async () => {

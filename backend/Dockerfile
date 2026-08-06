@@ -29,7 +29,7 @@ COPY scripts ./scripts
 COPY migrations ./migrations
 
 # Runs unprivileged. The base image already ships a `node` user (uid 1000).
-RUN mkdir -p /var/lib/codecloud/exec && chown -R node:node /var/lib/codecloud /app
+RUN mkdir -p /var/lib/mihenk/exec && chown -R node:node /var/lib/mihenk /app
 USER node
 
 ENV NODE_ENV=production

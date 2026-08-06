@@ -206,7 +206,7 @@ function runSandboxed(command, workDir, stdin, { language, backend, limits = {} 
   }
 
   // Named so the container can still be killed if the CLI has to be SIGKILLed.
-  const containerName = `codecloud-run-${crypto.randomUUID()}`;
+  const containerName = `mihenk-run-${crypto.randomUUID()}`;
   // A problem may ask for more room than the default; the JVM needs a bigger
   // floor than everything else before it will even start.
   const defaultMemoryMb =
@@ -242,7 +242,7 @@ async function prepareWorkDir(language, code) {
   const config = LANGUAGE_CONFIG[language];
   if (!config) throw new Error(`Unsupported language: ${language}`);
   const workDir = path.join(
-    env.EXEC_WORK_DIR || path.join(os.tmpdir(), 'codecloud-exec'),
+    env.EXEC_WORK_DIR || path.join(os.tmpdir(), 'mihenk-exec'),
     crypto.randomUUID()
   );
   await fs.mkdir(workDir, { recursive: true });

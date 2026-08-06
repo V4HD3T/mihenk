@@ -1,4 +1,4 @@
-# CodeCloud - single-host deployment.
+# Mihenk - single-host deployment.
 #
 #   cp .env.production.example .env
 #   # fill in the secrets it tells you to
@@ -26,20 +26,20 @@
 #
 # See "Deployment" in backend/README.md before choosing that.
 
-name: codecloud
+name: mihenk
 
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-codecloud}
-      POSTGRES_USER: ${DB_USER:-codecloud}
+      POSTGRES_DB: ${DB_NAME:-mihenk}
+      POSTGRES_USER: ${DB_USER:-mihenk}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-codecloud} -d ${DB_NAME:-codecloud}']
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-mihenk} -d ${DB_NAME:-mihenk}']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -68,7 +68,7 @@ services:
   api:
     build:
       context: ./backend
-    image: codecloud-api:${CODECLOUD_VERSION:-latest}
+    image: mihenk-api:${MIHENK_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -80,8 +80,8 @@ services:
       PORT: 4000
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-codecloud}
-      DB_USER: ${DB_USER:-codecloud}
+      DB_NAME: ${DB_NAME:-mihenk}
+      DB_USER: ${DB_USER:-mihenk}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -100,7 +100,7 @@ services:
   web:
     build:
       context: ./frontend
-    image: codecloud-web:${CODECLOUD_VERSION:-latest}
+    image: mihenk-web:${MIHENK_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       - api
@@ -115,7 +115,7 @@ services:
     profiles: ['containerised-worker']
     build:
       context: ./backend
-    image: codecloud-api:${CODECLOUD_VERSION:-latest}
+    image: mihenk-api:${MIHENK_VERSION:-latest}
     restart: unless-stopped
     command: ['node', 'src/workerPool.js']
     depends_on:
@@ -127,8 +127,8 @@ services:
       NODE_ENV: production
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-codecloud}
-      DB_USER: ${DB_USER:-codecloud}
+      DB_NAME: ${DB_NAME:-mihenk}
+      DB_USER: ${DB_USER:-mihenk}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -139,10 +139,10 @@ services:
       # directory therefore has to mean the same thing on both sides, or every
       # sandbox container receives an empty directory and every submission fails
       # with "file not found" - verified.
-      EXEC_WORK_DIR: /var/lib/codecloud/exec
+      EXEC_WORK_DIR: /var/lib/mihenk/exec
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /var/lib/codecloud/exec:/var/lib/codecloud/exec
+      - /var/lib/mihenk/exec:/var/lib/mihenk/exec
 
   # Monitoring. Opt-in, because a single-host install that nobody watches does
   # not need two more processes:
@@ -185,7 +185,7 @@ services:
       GF_USERS_ALLOW_SIGN_UP: 'false'
     volumes:
       - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./ops/grafana/dashboard.json:/var/lib/grafana/dashboards/codecloud.json:ro
+      - ./ops/grafana/dashboard.json:/var/lib/grafana/dashboards/mihenk.json:ro
       - grafana-data:/var/lib/grafana
     ports:
       - '127.0.0.1:${GRAFANA_PORT:-3000}:3000'

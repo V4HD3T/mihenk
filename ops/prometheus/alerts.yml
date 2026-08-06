@@ -1,4 +1,4 @@
-# Alerting rules for CodeCloud.
+# Alerting rules for Mihenk.
 #
 # These are written for the question actually asked during an exam: is grading
 # keeping up, and is anything being lost? Every rule here should be one a person
@@ -10,10 +10,10 @@
 # rather than silently disabling an alert.
 
 groups:
-  - name: codecloud-availability
+  - name: mihenk-availability
     rules:
-      - alert: CodeCloudAPIDown
-        expr: up{job="codecloud-api"} == 0
+      - alert: MihenkAPIDown
+        expr: up{job="mihenk-api"} == 0
         for: 1m
         labels:
           severity: critical
@@ -23,8 +23,8 @@ groups:
             Prometheus cannot reach the API. If this is real rather than a
             scrape problem, nobody can sign in or submit.
 
-      - alert: CodeCloudNoWorkers
-        expr: sum(codecloud_worker_pool_size) == 0
+      - alert: MihenkNoWorkers
+        expr: sum(mihenk_worker_pool_size) == 0
         for: 2m
         labels:
           severity: critical
@@ -34,12 +34,12 @@ groups:
             Submissions are still accepted and queued, so students see "queued"
             and nothing else happens. Start the worker pool.
 
-  - name: codecloud-grading
+  - name: mihenk-grading
     rules:
       # The queue draining slower than it fills. Sustained, not a spike: a burst
       # at the start of an exam is normal and clears itself.
-      - alert: CodeCloudQueueBacklog
-        expr: sum(codecloud_queue_depth{state="waiting"}) > 50
+      - alert: MihenkQueueBacklog
+        expr: sum(mihenk_queue_depth{state="waiting"}) > 50
         for: 5m
         labels:
           severity: warning
@@ -51,11 +51,11 @@ groups:
 
       # What a student actually experiences. Grading duration can be long
       # without anyone minding; waiting to *start* is the part that feels broken.
-      - alert: CodeCloudSlowQueueWait
+      - alert: MihenkSlowQueueWait
         expr: >-
           histogram_quantile(
             0.95,
-            sum(rate(codecloud_queue_wait_seconds_bucket[5m])) by (le)
+            sum(rate(mihenk_queue_wait_seconds_bucket[5m])) by (le)
           ) > 30
         for: 5m
         labels:
@@ -68,8 +68,8 @@ groups:
 
       # An infrastructure failure, not a wrong answer: the job threw rather than
       # producing a verdict, so the student's result is an error they cannot fix.
-      - alert: CodeCloudGradingFailures
-        expr: sum(rate(codecloud_grading_failures_total[5m])) > 0
+      - alert: MihenkGradingFailures
+        expr: sum(rate(mihenk_grading_failures_total[5m])) > 0
         for: 5m
         labels:
           severity: critical
@@ -81,8 +81,8 @@ groups:
 
       # The one that loses work. The submission was written to the database and
       # nothing will ever grade it, so a student may believe they submitted.
-      - alert: CodeCloudEnqueueFailures
-        expr: sum(rate(codecloud_enqueue_failures_total[5m])) > 0
+      - alert: MihenkEnqueueFailures
+        expr: sum(rate(mihenk_enqueue_failures_total[5m])) > 0
         for: 1m
         labels:
           severity: critical
@@ -92,10 +92,10 @@ groups:
             The API accepted a submission but could not queue it, which usually
             means Redis is unreachable. Students are being told to try again.
 
-  - name: codecloud-resources
+  - name: mihenk-resources
     rules:
-      - alert: CodeCloudDBPoolSaturated
-        expr: sum(codecloud_db_pool_connections{state="waiting"}) > 0
+      - alert: MihenkDBPoolSaturated
+        expr: sum(mihenk_db_pool_connections{state="waiting"}) > 0
         for: 5m
         labels:
           severity: warning
@@ -105,8 +105,8 @@ groups:
             Every pooled connection is busy and requests are waiting. Raise
             DB_POOL_MAX, or find the slow query holding them.
 
-      - alert: CodeCloudEventLoopBlocked
-        expr: max(codecloud_nodejs_eventloop_lag_p99_seconds) > 1
+      - alert: MihenkEventLoopBlocked
+        expr: max(mihenk_nodejs_eventloop_lag_p99_seconds) > 1
         for: 5m
         labels:
           severity: warning
@@ -116,11 +116,11 @@ groups:
             Something synchronous is blocking the process. Requests that look
             unrelated will time out.
 
-      - alert: CodeCloudAPIErrors
+      - alert: MihenkAPIErrors
         expr: >-
-          sum(rate(codecloud_http_request_duration_seconds_count{status=~"5.."}[5m]))
+          sum(rate(mihenk_http_request_duration_seconds_count{status=~"5.."}[5m]))
           /
-          sum(rate(codecloud_http_request_duration_seconds_count[5m]))
+          sum(rate(mihenk_http_request_duration_seconds_count[5m]))
           > 0.05
         for: 5m
         labels:

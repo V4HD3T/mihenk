@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "CodeCloud",
+    "name": "Mihenk",
     "tagline": "Bulut tabanlı kodlama eğitimi, tek platformda.",
     "blurb": "Öğretmenler otomatik değerlendirilen alıştırma ve sınavlar hazırlar; öğrenciler tarayıcıda kod yazıp sonucu anında görür."
   },
@@ -14,7 +14,7 @@
     "analytics": "Analitik",
     "logOut": "Çıkış yap",
     "language": "Dil",
-    "brand": "CodeCloud",
+    "brand": "Mihenk",
     "main": "Ana menü",
     "mySubmissions": "Gönderimlerim",
     "archive": "Arşiv"

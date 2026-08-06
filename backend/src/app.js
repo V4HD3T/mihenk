@@ -101,7 +101,7 @@ function createApp(envOverrides = {}) {
   });
 
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'codecloud-backend', time: new Date().toISOString() });
+    res.json({ status: 'ok', service: 'mihenk-backend', time: new Date().toISOString() });
   });
 
   // The API's own description. Unauthenticated on purpose: it documents the

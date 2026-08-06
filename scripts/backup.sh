@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# Dumps the CodeCloud database from the running compose stack.
+# Dumps the Mihenk database from the running compose stack.
 #
-#   ./scripts/backup.sh                    -> backups/codecloud-<timestamp>.sql.gz
-#   ./scripts/backup.sh /mnt/nas/codecloud -> writes there instead
+#   ./scripts/backup.sh                    -> backups/mihenk-<timestamp>.sql.gz
+#   ./scripts/backup.sh /mnt/nas/mihenk -> writes there instead
 #
 # What is and isn't covered:
 #   - The database holds everything that matters: accounts, courses, problems,
@@ -32,10 +32,10 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-DB_NAME="${DB_NAME:-codecloud}"
-DB_USER="${DB_USER:-codecloud}"
+DB_NAME="${DB_NAME:-mihenk}"
+DB_USER="${DB_USER:-mihenk}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-FILE="$OUT_DIR/codecloud-$STAMP.sql.gz"
+FILE="$OUT_DIR/mihenk-$STAMP.sql.gz"
 
 echo "Dumping $DB_NAME ..."
 docker compose exec -T postgres \
@@ -61,9 +61,9 @@ echo "Verified: readable, and contains the expected schema."
 
 # Retain a month of daily backups by default.
 KEEP="${BACKUP_KEEP:-30}"
-COUNT="$(find "$OUT_DIR" -name 'codecloud-*.sql.gz' | wc -l | tr -d ' ')"
+COUNT="$(find "$OUT_DIR" -name 'mihenk-*.sql.gz' | wc -l | tr -d ' ')"
 if (( COUNT > KEEP )); then
-  find "$OUT_DIR" -name 'codecloud-*.sql.gz' -print0 \
+  find "$OUT_DIR" -name 'mihenk-*.sql.gz' -print0 \
     | sort -z \
     | head -z -n "-$KEEP" \
     | xargs -0 rm -f

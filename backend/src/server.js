@@ -88,7 +88,7 @@ queueEvents.on('completed', ({ returnvalue }) => {
 });
 
 server.listen(env.PORT, () => {
-  logger.info(`CodeCloud backend running on port ${env.PORT} (HTTP + WebSocket at /ws)`);
+  logger.info(`Mihenk backend running on port ${env.PORT} (HTTP + WebSocket at /ws)`);
 });
 
 /**

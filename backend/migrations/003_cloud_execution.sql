@@ -1,6 +1,6 @@
 -- Migration 003: Cloud-native execution architecture (v0.0.2)
 -- Safe to run against an existing v0.0.1 database - purely additive.
--- Usage: psql -U postgres -d codecloud -f backend/migrations/003_cloud_execution.sql
+-- Usage: psql -U postgres -d mihenk -f backend/migrations/003_cloud_execution.sql
 
 -- New submission lifecycle states for the async grading queue.
 ALTER TYPE submission_status ADD VALUE IF NOT EXISTS 'queued';

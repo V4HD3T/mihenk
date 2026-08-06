@@ -98,13 +98,13 @@ function layout({ heading, body, actionUrl, actionLabel, footer }) {
 
 async function sendPasswordReset({ to, name, url, expiresInMinutes }) {
   const { text, html } = layout({
-    heading: 'Reset your CodeCloud password',
+    heading: 'Reset your Mihenk password',
     body: `Hello ${name}, someone asked to reset the password for this account.`,
     actionUrl: url,
     actionLabel: 'Choose a new password',
     footer: `This link works once and expires in ${expiresInMinutes} minutes. If you didn't ask for it, you can ignore this message - your password has not changed.`,
   });
-  return send({ to, subject: 'Reset your CodeCloud password', text, html });
+  return send({ to, subject: 'Reset your Mihenk password', text, html });
 }
 
 async function sendEmailVerification({ to, name, url, expiresInHours }) {
@@ -115,7 +115,7 @@ async function sendEmailVerification({ to, name, url, expiresInHours }) {
     actionLabel: 'Confirm my address',
     footer: `This link expires in ${expiresInHours} hours.`,
   });
-  return send({ to, subject: 'Confirm your CodeCloud email address', text, html });
+  return send({ to, subject: 'Confirm your Mihenk email address', text, html });
 }
 
 module.exports = {

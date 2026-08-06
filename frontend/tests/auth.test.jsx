@@ -112,8 +112,8 @@ describe('login', () => {
     await userEvent.type(screen.getByLabelText(/password/i), 'password123');
     await userEvent.click(screen.getByRole('button', { name: /log in|sign in/i }));
 
-    await waitFor(() => expect(localStorage.getItem('codecloud_token')).toBe('jwt-token'));
-    expect(JSON.parse(localStorage.getItem('codecloud_user')).name).toBe('Ada');
+    await waitFor(() => expect(localStorage.getItem('mihenk_token')).toBe('jwt-token'));
+    expect(JSON.parse(localStorage.getItem('mihenk_user')).name).toBe('Ada');
   });
 
   it('does not store anything when the credentials are wrong', async () => {
@@ -125,6 +125,6 @@ describe('login', () => {
     await userEvent.click(screen.getByRole('button', { name: /log in|sign in/i }));
 
     expect(await screen.findByText(/invalid email or password/i)).toBeInTheDocument();
-    expect(localStorage.getItem('codecloud_token')).toBeNull();
+    expect(localStorage.getItem('mihenk_token')).toBeNull();
   });
 });

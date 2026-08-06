@@ -3,7 +3,7 @@
  *
  * Every counter the workers keep - grading duration, queue wait, verdicts,
  * grading failures - lived in a registry inside a forked process with no way to
- * read it, and `codecloud_worker_pool_size` was a gauge nothing ever wrote. The
+ * read it, and `mihenk_worker_pool_size` was a gauge nothing ever wrote. The
  * dashboards built on those series would have drawn empty graphs, which reads
  * as "nothing is happening" rather than "this is not wired up".
  *
@@ -51,7 +51,7 @@ describe('the pool aggregates its workers', () => {
     const { pool, children } = poolWithChildren(2);
     try {
       const body = await pool.collectMetrics();
-      expect(body).toMatch(/codecloud_worker_pool_size(\{[^}]*\})? 2/);
+      expect(body).toMatch(/mihenk_worker_pool_size(\{[^}]*\})? 2/);
     } finally {
       for (const c of children) c.kill();
     }
@@ -62,7 +62,7 @@ describe('the pool aggregates its workers', () => {
     try {
       const body = await pool.collectMetrics();
       // Each child records one submission in a distinct language.
-      expect(body).toContain('codecloud_verdicts_total');
+      expect(body).toContain('mihenk_verdicts_total');
       expect(body).toContain('language="python"');
       expect(body).toContain('language="java"');
       expect(body).toContain('language="go"');
@@ -75,7 +75,7 @@ describe('the pool aggregates its workers', () => {
     const { pool, children } = poolWithChildren(3);
     try {
       const body = await pool.collectMetrics();
-      const total = [...body.matchAll(/^codecloud_grading_failures_total\S* (\d+)$/gm)].reduce(
+      const total = [...body.matchAll(/^mihenk_grading_failures_total\S* (\d+)$/gm)].reduce(
         (sum, [, n]) => sum + Number(n),
         0
       );
@@ -93,7 +93,7 @@ describe('the pool aggregates its workers', () => {
     await new Promise((r) => setTimeout(r, 200));
     try {
       const body = await pool.collectMetrics(300);
-      expect(body).toContain('codecloud_worker_pool_size');
+      expect(body).toContain('mihenk_worker_pool_size');
     } finally {
       for (const c of children) c.kill();
     }

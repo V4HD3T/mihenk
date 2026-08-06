@@ -1,4 +1,4 @@
-# CodeCloud - Backend
+# Mihenk - Backend
 
 **Version 0.1.0**
 
@@ -52,8 +52,8 @@ PostgreSQL **12 or newer** must be installed and running.
 
 **New installation:**
 ```bash
-createdb codecloud
-psql -U postgres -d codecloud -f src/db/schema.sql
+createdb mihenk
+psql -U postgres -d mihenk -f src/db/schema.sql
 ```
 `schema.sql` is the complete current schema - it already contains everything in
 `migrations/`, and records those migrations as applied.
@@ -88,7 +88,7 @@ disables teacher self-registration entirely.
 
 ### Running
 
-CodeCloud now needs **three** things running: PostgreSQL, Redis, and two Node processes (the
+Mihenk now needs **three** things running: PostgreSQL, Redis, and two Node processes (the
 API server and at least one grading worker).
 
 ```bash
@@ -133,9 +133,9 @@ entirely in SQL and mocking the database would only test the mock. They **skip**
 is reachable, so `npm test` still works on a laptop without one:
 
 ```bash
-docker run -d --name codecloud-pg -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=codecloud_test -p 55432:5432 postgres:16-alpine
-docker run -d --name codecloud-redis -p 56379:6379 redis:7-alpine
+docker run -d --name mihenk-pg -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=mihenk_test -p 55432:5432 postgres:16-alpine
+docker run -d --name mihenk-redis -p 56379:6379 redis:7-alpine
 
 TEST_DB_PORT=55432 TEST_REDIS_PORT=56379 npm test
 ```
@@ -325,7 +325,7 @@ The compose stack speaks plain HTTP. Terminate TLS in front of it rather than in
 ```yaml
 # .env
 HTTP_PORT=127.0.0.1:8080      # keep nginx off the public interface
-PUBLIC_ORIGIN=https://codecloud.example.edu
+PUBLIC_ORIGIN=https://mihenk.example.edu
 ```
 
 Then point Caddy, Traefik or host nginx + certbot at `127.0.0.1:8080`. `PUBLIC_ORIGIN` must match
@@ -334,7 +334,7 @@ what users type, because it is also what WebSocket handshakes are validated agai
 ### Backup and restore
 
 ```bash
-./scripts/backup.sh                       # -> backups/codecloud-<timestamp>.sql.gz
+./scripts/backup.sh                       # -> backups/mihenk-<timestamp>.sql.gz
 ./scripts/restore.sh backups/<file>.sql.gz
 ```
 
@@ -374,13 +374,13 @@ Worth watching during an exam:
 
 | Metric | Question it answers |
 |---|---|
-| `codecloud_queue_depth{state="waiting"}` | is the backlog growing faster than it drains? |
-| `codecloud_queue_wait_seconds` | how long is a student waiting before grading even starts? |
-| `codecloud_grading_duration_seconds` | how long does grading itself take, by language? |
-| `codecloud_verdicts_total` | a sudden spike in `runtime_error` usually means the problem, not the students |
-| `codecloud_grading_failures_total` | jobs that threw - an infrastructure problem, not a wrong answer |
-| `codecloud_enqueue_failures_total` | submissions that couldn't be queued at all, e.g. Redis down |
-| `codecloud_db_pool_connections{state="waiting"}` | requests queueing for a database connection |
+| `mihenk_queue_depth{state="waiting"}` | is the backlog growing faster than it drains? |
+| `mihenk_queue_wait_seconds` | how long is a student waiting before grading even starts? |
+| `mihenk_grading_duration_seconds` | how long does grading itself take, by language? |
+| `mihenk_verdicts_total` | a sudden spike in `runtime_error` usually means the problem, not the students |
+| `mihenk_grading_failures_total` | jobs that threw - an infrastructure problem, not a wrong answer |
+| `mihenk_enqueue_failures_total` | submissions that couldn't be queued at all, e.g. Redis down |
+| `mihenk_db_pool_connections{state="waiting"}` | requests queueing for a database connection |
 
 The endpoint requires `METRICS_TOKEN` as a bearer token. Leave the variable unset and the
 endpoint is **disabled**, not public - queue depth and failure rates are operational detail.

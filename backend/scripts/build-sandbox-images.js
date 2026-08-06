@@ -23,7 +23,7 @@ const DOCKER_DIR = path.join(__dirname, '..', 'docker');
 // Read this one setting directly rather than through the validated app config:
 // building images is an ops task that shouldn't require a complete, valid
 // server configuration (a JWT secret, database credentials) to be present.
-const IMAGE_PREFIX = process.env.SANDBOX_IMAGE_PREFIX || 'codecloud';
+const IMAGE_PREFIX = process.env.SANDBOX_IMAGE_PREFIX || 'mihenk';
 
 // Command proving the language's toolchain is present and runnable as the
 // unprivileged container user.

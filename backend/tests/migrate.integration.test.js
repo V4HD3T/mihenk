@@ -14,7 +14,7 @@ const available = await db.isAvailable();
 const describeDb = available ? describe : describe.skip;
 
 describeDb('migration runner', () => {
-  const dbName = 'codecloud_migrate_test';
+  const dbName = 'mihenk_migrate_test';
   let admin;
 
   /** Runs the real CLI against a named database, as an operator would. */
@@ -125,7 +125,7 @@ describeDb('migration runner', () => {
   });
 
   it('upgrades a v0.0.1-era database without touching its data', async () => {
-    const legacy = 'codecloud_legacy_test';
+    const legacy = 'mihenk_legacy_test';
     await admin.query(`DROP DATABASE IF EXISTS ${legacy} WITH (FORCE)`);
     await admin.query(`CREATE DATABASE ${legacy}`);
 

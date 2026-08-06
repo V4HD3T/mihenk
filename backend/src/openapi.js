@@ -1509,7 +1509,7 @@ const paths = {
 const document = {
   openapi: '3.1.0',
   info: {
-    title: 'CodeCloud API',
+    title: 'Mihenk API',
     version,
     description:
       'Cloud-based coding education and examination.\n\n' +

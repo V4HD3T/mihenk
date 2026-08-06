@@ -20,7 +20,7 @@ const schema = z.object({
 
   DB_HOST: z.string().min(1).default('localhost'),
   DB_PORT: numeric(5432),
-  DB_NAME: z.string().min(1).default('codecloud'),
+  DB_NAME: z.string().min(1).default('mihenk'),
   DB_USER: z.string().min(1).default('postgres'),
   DB_PASSWORD: z.string().default('postgres'),
 
@@ -51,7 +51,7 @@ const schema = z.object({
   // 'auto' is convenient for development but must never be used to serve
   // untrusted users: it silently degrades to the weaker backend.
   SANDBOX_MODE: z.enum(['docker', 'host', 'auto']).default('auto'),
-  SANDBOX_IMAGE_PREFIX: z.string().min(1).default('codecloud'),
+  SANDBOX_IMAGE_PREFIX: z.string().min(1).default('mihenk'),
   SANDBOX_MEMORY_MB: numeric(256),
   SANDBOX_JAVA_MEMORY_MB: numeric(384),
   SANDBOX_CPUS: z.coerce.number().positive().default(0.5),
@@ -99,7 +99,7 @@ const schema = z.object({
   SMTP_PORT: numeric(587),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
-  MAIL_FROM: z.string().default('CodeCloud <no-reply@codecloud.local>'),
+  MAIL_FROM: z.string().default('Mihenk <no-reply@mihenk.local>'),
 
   // Where the links in those emails point. Same value as PUBLIC_ORIGIN in a
   // compose deployment.

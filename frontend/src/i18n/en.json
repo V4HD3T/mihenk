@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "CodeCloud",
+    "name": "Mihenk",
     "tagline": "Cloud-based coding education in one platform.",
     "blurb": "Teachers create exercises and exams with automatic grading; students write code in the browser and see results instantly."
   },
@@ -14,7 +14,7 @@
     "analytics": "Analytics",
     "logOut": "Log out",
     "language": "Language",
-    "brand": "CodeCloud",
+    "brand": "Mihenk",
     "main": "Main",
     "mySubmissions": "My Submissions",
     "archive": "Archive"

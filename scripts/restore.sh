@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Restores a CodeCloud database dump into the running compose stack.
+# Restores a Mihenk database dump into the running compose stack.
 #
-#   ./scripts/restore.sh backups/codecloud-20260804-120000.sql.gz
+#   ./scripts/restore.sh backups/mihenk-20260804-120000.sql.gz
 #
 # This REPLACES the current database. It asks for confirmation first, because
 # the one time this gets run by accident is the one time it matters.
@@ -18,7 +18,7 @@ FILE="${1:-}"
 if [[ -z "$FILE" ]]; then
   echo "Usage: $0 <backup.sql.gz>" >&2
   echo "Available:" >&2
-  ls -1t backups/codecloud-*.sql.gz 2>/dev/null | head -10 >&2 || echo "  (none in ./backups)" >&2
+  ls -1t backups/mihenk-*.sql.gz 2>/dev/null | head -10 >&2 || echo "  (none in ./backups)" >&2
   exit 1
 fi
 if [[ ! -f "$FILE" ]]; then
@@ -32,8 +32,8 @@ if [[ -f .env ]]; then
   source .env
   set +a
 fi
-DB_NAME="${DB_NAME:-codecloud}"
-DB_USER="${DB_USER:-codecloud}"
+DB_NAME="${DB_NAME:-mihenk}"
+DB_USER="${DB_USER:-mihenk}"
 
 CURRENT="$(docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -t -A \
   -c 'SELECT count(*) FROM users' 2>/dev/null || echo '?')"

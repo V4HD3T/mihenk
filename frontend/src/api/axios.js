@@ -5,7 +5,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('codecloud_token');
+  const token = localStorage.getItem('mihenk_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -16,8 +16,8 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('codecloud_token');
-      localStorage.removeItem('codecloud_user');
+      localStorage.removeItem('mihenk_token');
+      localStorage.removeItem('mihenk_user');
       if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';
       }

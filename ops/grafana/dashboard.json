@@ -1,8 +1,8 @@
 {
-  "uid": "codecloud-overview",
-  "title": "CodeCloud — Grading and API",
+  "uid": "mihenk-overview",
+  "title": "Mihenk — Grading and API",
   "description": "The questions asked while an exam is running: is grading keeping up, is anything being lost, and is the API healthy. Panels are ordered so the top row answers 'should I be worried' without scrolling.",
-  "tags": ["codecloud"],
+  "tags": ["mihenk"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
@@ -43,7 +43,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(codecloud_queue_depth{state=\"waiting\"})",
+          "expr": "sum(mihenk_queue_depth{state=\"waiting\"})",
           "legendFormat": "waiting"
         }
       ]
@@ -72,7 +72,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum(rate(codecloud_queue_wait_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(mihenk_queue_wait_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95"
         }
       ]
@@ -97,7 +97,7 @@
         "overrides": []
       },
       "targets": [
-        { "refId": "A", "expr": "sum(codecloud_worker_pool_size)", "legendFormat": "workers" }
+        { "refId": "A", "expr": "sum(mihenk_worker_pool_size)", "legendFormat": "workers" }
       ]
     },
     {
@@ -122,7 +122,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(increase(codecloud_enqueue_failures_total[1h]))",
+          "expr": "sum(increase(mihenk_enqueue_failures_total[1h]))",
           "legendFormat": "last hour"
         }
       ]
@@ -138,7 +138,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(codecloud_queue_depth) by (state)",
+          "expr": "sum(mihenk_queue_depth) by (state)",
           "legendFormat": "{{state}}"
         }
       ]
@@ -153,7 +153,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(codecloud_submissions_total[5m])) by (language) * 60",
+          "expr": "sum(rate(mihenk_submissions_total[5m])) by (language) * 60",
           "legendFormat": "{{language}}"
         }
       ]
@@ -170,7 +170,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum(rate(codecloud_grading_duration_seconds_bucket[5m])) by (le, language))",
+          "expr": "histogram_quantile(0.95, sum(rate(mihenk_grading_duration_seconds_bucket[5m])) by (le, language))",
           "legendFormat": "{{language}}"
         }
       ]
@@ -186,7 +186,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(codecloud_verdicts_total[5m])) by (verdict) * 60",
+          "expr": "sum(rate(mihenk_verdicts_total[5m])) by (verdict) * 60",
           "legendFormat": "{{verdict}}"
         }
       ]
@@ -202,7 +202,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(codecloud_grading_failures_total[5m])) * 60",
+          "expr": "sum(rate(mihenk_grading_failures_total[5m])) * 60",
           "legendFormat": "failures/min"
         }
       ]
@@ -217,7 +217,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "topk(8, histogram_quantile(0.95, sum(rate(codecloud_http_request_duration_seconds_bucket[5m])) by (le, route)))",
+          "expr": "topk(8, histogram_quantile(0.95, sum(rate(mihenk_http_request_duration_seconds_bucket[5m])) by (le, route)))",
           "legendFormat": "{{route}}"
         }
       ]
@@ -231,7 +231,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(codecloud_http_request_duration_seconds_count[5m])) by (status) * 60",
+          "expr": "sum(rate(mihenk_http_request_duration_seconds_count[5m])) by (status) * 60",
           "legendFormat": "{{status}}"
         }
       ]
@@ -247,7 +247,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(codecloud_db_pool_connections) by (state)",
+          "expr": "sum(mihenk_db_pool_connections) by (state)",
           "legendFormat": "{{state}}"
         }
       ]
@@ -263,7 +263,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "codecloud_nodejs_eventloop_lag_p99_seconds",
+          "expr": "mihenk_nodejs_eventloop_lag_p99_seconds",
           "legendFormat": "{{role}}"
         }
       ]
@@ -278,7 +278,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "codecloud_process_resident_memory_bytes",
+          "expr": "mihenk_process_resident_memory_bytes",
           "legendFormat": "{{role}}"
         }
       ]

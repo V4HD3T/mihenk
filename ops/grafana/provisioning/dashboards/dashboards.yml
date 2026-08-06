@@ -1,7 +1,7 @@
 apiVersion: 1
 
 providers:
-  - name: codecloud
+  - name: mihenk
     type: file
     # The dashboard is provisioned from the repository, so edits made in the
     # Grafana UI are overwritten on restart. Change ops/grafana/dashboard.json

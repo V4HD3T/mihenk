@@ -39,9 +39,9 @@ export function renderApp(ui, { route = '/', path } = {}) {
 
 /** Puts a logged-in user in localStorage, the way the app stores one. */
 export function signIn({ role = 'student', name = 'Test User', id = 1 } = {}) {
-  localStorage.setItem('codecloud_token', 'test-token');
+  localStorage.setItem('mihenk_token', 'test-token');
   localStorage.setItem(
-    'codecloud_user',
+    'mihenk_user',
     JSON.stringify({ id, name, email: 'test@x.edu', role })
   );
 }

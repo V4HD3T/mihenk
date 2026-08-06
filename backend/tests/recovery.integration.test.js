@@ -5,7 +5,7 @@
  * so this covers the whole path rather than asserting that a function was
  * called. Needs Mailpit (or any SMTP catcher with an API):
  *
- *   docker run -d --name codecloud-mail -p 1025:1025 -p 8025:8025 axllent/mailpit
+ *   docker run -d --name mihenk-mail -p 1025:1025 -p 8025:8025 axllent/mailpit
  *
  * Skips when no catcher is reachable, so `npm test` still works without it.
  */
@@ -61,8 +61,8 @@ describeIf('account recovery', () => {
     process.env.MAIL_TRANSPORT = 'smtp';
     process.env.SMTP_HOST = SMTP_HOST;
     process.env.SMTP_PORT = SMTP_PORT;
-    process.env.MAIL_FROM = 'CodeCloud <no-reply@test.local>';
-    process.env.PUBLIC_URL = 'https://codecloud.test';
+    process.env.MAIL_FROM = 'Mihenk <no-reply@test.local>';
+    process.env.PUBLIC_URL = 'https://mihenk.test';
     await db.resetSchema();
 
     const appModule = await import('../src/app.js');
@@ -108,7 +108,7 @@ describeIf('account recovery', () => {
       }
       expect(message).toBeTruthy();
       expect(message.subject).toMatch(/confirm/i);
-      expect(linkFrom(message.text, '/verify-email')).toMatch(/^https:\/\/codecloud\.test/);
+      expect(linkFrom(message.text, '/verify-email')).toMatch(/^https:\/\/mihenk\.test/);
     });
 
     it('confirms the address when the link is used', async () => {

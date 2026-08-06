@@ -7,7 +7,7 @@
  * Both fail silently and in the reassuring direction, which is the worst way for
  * monitoring to break.
  *
- * So every `codecloud_*` name in ops/ is resolved against the registry the
+ * So every `mihenk_*` name in ops/ is resolved against the registry the
  * application actually builds.
  */
 
@@ -45,7 +45,7 @@ function resolves(name) {
 }
 
 function namesIn(text) {
-  return [...new Set([...text.matchAll(/\bcodecloud_[a-z0-9_]+/g)].map((m) => m[0]))].sort();
+  return [...new Set([...text.matchAll(/\bmihenk_[a-z0-9_]+/g)].map((m) => m[0]))].sort();
 }
 
 describe('the dashboard queries metrics that exist', () => {
@@ -64,7 +64,7 @@ describe('the dashboard queries metrics that exist', () => {
     const parsed = JSON.parse(dashboardText);
     // Grafana keys a provisioned dashboard on its uid; changing it orphans the
     // old copy and silently creates a second one.
-    expect(parsed.uid).toBe('codecloud-overview');
+    expect(parsed.uid).toBe('mihenk-overview');
     expect(parsed.panels.length).toBeGreaterThan(0);
   });
 
@@ -206,9 +206,9 @@ describe('the scrape configuration matches the application', () => {
   });
 
   it('uses the job name the availability alert asserts on', () => {
-    // CodeCloudAPIDown is written against up{job="codecloud-api"}; a renamed
+    // MihenkAPIDown is written against up{job="mihenk-api"}; a renamed
     // job would leave that alert permanently silent.
-    expect(scrapeText).toContain('job_name: codecloud-api');
-    expect(alertsText).toContain('up{job="codecloud-api"} == 0');
+    expect(scrapeText).toContain('job_name: mihenk-api');
+    expect(alertsText).toContain('up{job="mihenk-api"} == 0');
   });
 });

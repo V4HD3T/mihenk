@@ -1,6 +1,6 @@
 -- Migration 002: Academic integrity features (v0.0.2)
 -- Safe to run against an existing v0.0.1 database - purely additive, no data is dropped.
--- Usage: psql -U postgres -d codecloud -f backend/migrations/002_academic_integrity.sql
+-- Usage: psql -U postgres -d mihenk -f backend/migrations/002_academic_integrity.sql
 
 CREATE TABLE IF NOT EXISTS integrity_events (
   id SERIAL PRIMARY KEY,

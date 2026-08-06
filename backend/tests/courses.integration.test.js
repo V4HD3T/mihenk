@@ -17,7 +17,7 @@ const describeDb = available ? describe : describe.skip;
 if (!available) {
   console.warn(
     `\n[integration] No PostgreSQL at ${db.dbConfig.host}:${db.dbConfig.port}/${db.dbConfig.database} - skipping course isolation tests.\n` +
-      '[integration] Start one with: docker run -d --name codecloud-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=codecloud_test -p 55432:5432 postgres:16-alpine\n'
+      '[integration] Start one with: docker run -d --name mihenk-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=mihenk_test -p 55432:5432 postgres:16-alpine\n'
   );
 }
 

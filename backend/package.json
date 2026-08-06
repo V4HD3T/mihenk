@@ -1,6 +1,6 @@
 {
-  "name": "codecloud-backend",
-  "version": "1.0.0",
+  "name": "mihenk-backend",
+  "version": "2.0.0",
   "description": "Cloud-Based Multi-Platform Coding Education and Exam System - Backend API",
   "main": "src/server.js",
   "type": "commonjs",

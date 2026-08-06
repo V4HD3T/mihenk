@@ -1,6 +1,6 @@
 # Versioning and support
 
-CodeCloud follows [Semantic Versioning](https://semver.org/). This document says
+Mihenk follows [Semantic Versioning](https://semver.org/). This document says
 what that actually means here, because "semver" on its own does not tell you
 which changes are breaking — that depends on what counts as the interface, and
 that is a decision rather than a fact.
@@ -20,7 +20,7 @@ These are the things a change to which is a breaking change:
 
 Everything else is internal: module layout, function signatures inside the
 backend, React component structure, CSS class names, the contents of the
-`codecloud-*-sandbox` images, and the exact wording of any message. Depending on
+`mihenk-*-sandbox` images, and the exact wording of any message. Depending on
 those is depending on an implementation detail, and they change in patch
 releases.
 
@@ -102,7 +102,7 @@ it is true:
 - `backend/tests/openapi.test.js` walks the live Express router and fails if the
   OpenAPI document and the application disagree about which endpoints exist, in
   either direction.
-- `backend/tests/observability.test.js` resolves every `codecloud_*` name in the
+- `backend/tests/observability.test.js` resolves every `mihenk_*` name in the
   Grafana dashboard and the alerting rules against the registry the application
   actually builds, so a renamed metric breaks the build instead of quietly
   emptying a graph or silencing an alert.

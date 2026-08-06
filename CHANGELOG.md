@@ -2,6 +2,83 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.0] - Mihenk
+
+The project is renamed from CodeCloud to **Mihenk**. A *mihenk taşı* is a
+touchstone: the stone you rub gold against, judging its purity by the streak it
+leaves. That is what this system does to a submission, so the name is the thing.
+"CodeCloud" described the hosting, and described it the same way a dozen other
+projects do.
+
+No behaviour changes. This is a major release because the name reaches into
+things `VERSIONING.md` calls the public interface, and pretending otherwise
+would be exactly the sort of quiet break that document exists to prevent.
+
+### Breaking
+
+**Read this before upgrading an existing install.** In order of how much they
+cost to get wrong:
+
+1. **The compose project name changed, which orphans your data volumes.**
+   `docker compose` prefixes volume names with the project, so `codecloud` gave
+   you `codecloud_postgres-data` and `mihenk` looks for `mihenk_postgres-data`.
+   Bringing the new stack up over an old install therefore starts with an
+   **empty database** and leaves the real one untouched but unused. It looks
+   like total data loss and is not, which is arguably worse — you find out after
+   the students do.
+
+   Either keep the old project name:
+
+   ```bash
+   docker compose -p codecloud up -d      # or: COMPOSE_PROJECT_NAME=codecloud
+   ```
+
+   or migrate the volumes deliberately: back up with `scripts/backup.sh` on the
+   old stack, bring up the new one, restore with `scripts/restore.sh`.
+
+2. **`DB_NAME` and `DB_USER` defaults changed** from `codecloud` to `mihenk`. An
+   install that relied on the defaults must now set them explicitly to keep
+   pointing at the database it already has.
+
+3. **Every metric was renamed**, `codecloud_*` → `mihenk_*`. The dashboard and
+   alerting rules in `ops/` are updated in step, but any dashboard or alert you
+   wrote yourself goes blank and silent rather than erroring. The Grafana
+   dashboard `uid` is now `mihenk-overview`, so it provisions as a new dashboard
+   and the old one remains until deleted. Alert rule names changed too
+   (`CodeCloudAPIDown` → `MihenkAPIDown`), which matters if anything routes on
+   them.
+
+4. **Browser storage keys changed**, so **every signed-in user is signed out
+   once** and has to sign in again. Nothing is lost; unsubmitted drafts live on
+   the server, not in the browser.
+
+5. **Image names changed**: `codecloud-api`/`codecloud-web` → `mihenk-api`/
+   `mihenk-web`, and the sandbox images are now `mihenk-<language>-sandbox`
+   (`SANDBOX_IMAGE_PREFIX` default `mihenk`). Run `npm run sandbox:build`, or
+   retag what you have. Grading **fails closed** against missing images rather
+   than running unsandboxed, so a missed rebuild is a stopped queue, not a
+   security hole.
+
+6. `CODECLOUD_VERSION` → `MIHENK_VERSION`, and `MAIL_FROM` now defaults to
+   `Mihenk <no-reply@mihenk.local>`.
+
+### Unchanged
+- The database schema. No migration ships with this release, and none is needed.
+- Every HTTP route, request and response body. `/api/openapi.json` reports the
+  new title and version; nothing else about it moved.
+- The WebSocket contract.
+
+### Note on this file
+Earlier entries still say CodeCloud, and the v1.0.0 entry still names
+`codecloud_worker_pool_size`. Both are left alone deliberately: they record what
+was true when they were written, and editing history to match the present is how
+a changelog stops being evidence.
+
+### Verified
+235 backend tests and 50 frontend tests, both lint suites clean, 7/7 sandbox
+containment checks against rebuilt images, production build green. 56 files
+rewritten; zero occurrences of the old name remain outside this file.
+
 ## [1.0.0] - Documented and Observable
 
 The last three releases closed the functional gaps. This one closes the gap

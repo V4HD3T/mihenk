@@ -17,7 +17,7 @@ export function useSubmissionSocket(onResult) {
   callbackRef.current = onResult;
 
   useEffect(() => {
-    const token = localStorage.getItem('codecloud_token');
+    const token = localStorage.getItem('mihenk_token');
     if (!token) return;
 
     let socket;

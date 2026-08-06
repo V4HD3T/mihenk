@@ -1,4 +1,4 @@
-# Scrape configuration for a single-host CodeCloud deployment.
+# Scrape configuration for a single-host Mihenk deployment.
 #
 # /metrics is disabled outright unless METRICS_TOKEN is set, and requires that
 # token as a bearer credential. It is not the user JWT and must not be one: the
@@ -13,7 +13,7 @@ rule_files:
   - /etc/prometheus/alerts.yml
 
 scrape_configs:
-  - job_name: codecloud-api
+  - job_name: mihenk-api
     metrics_path: /metrics
     authorization:
       type: Bearer
@@ -25,7 +25,7 @@ scrape_configs:
   # docker-compose.yml), so they are scraped through the host gateway rather
   # than by service name. Each process sets a distinct `role` label, so their
   # series do not overwrite each other.
-  - job_name: codecloud-workers
+  - job_name: mihenk-workers
     metrics_path: /metrics
     authorization:
       type: Bearer

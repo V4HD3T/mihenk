@@ -1,7 +1,7 @@
-# CodeCloud
+# Mihenk
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 1.0.0**
+**Version 2.0.0**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
@@ -56,8 +56,8 @@ the application disagree about which endpoints exist, in either direction.
 
 ```bash
 # 1) Database (fresh install) - PostgreSQL 12+
-createdb codecloud
-psql -U postgres -d codecloud -f backend/src/db/schema.sql
+createdb mihenk
+psql -U postgres -d mihenk -f backend/src/db/schema.sql
 # Upgrading an existing database instead? Don't re-run schema.sql - it drops every table:
 #   cd backend && npm run migrate
 

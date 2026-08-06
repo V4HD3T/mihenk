@@ -125,7 +125,7 @@ describe('translation catalogues', () => {
 describe('language switching', () => {
   it('starts in English and switches the interface to Turkish', async () => {
     signIn({ role: 'student' });
-    localStorage.setItem('codecloud_language', 'en');
+    localStorage.setItem('mihenk_language', 'en');
     renderApp(<Navbar />);
 
     expect(screen.getByText('Problems')).toBeInTheDocument();
@@ -138,11 +138,11 @@ describe('language switching', () => {
 
   it('remembers the choice for the next visit', async () => {
     signIn({ role: 'student' });
-    localStorage.setItem('codecloud_language', 'en');
+    localStorage.setItem('mihenk_language', 'en');
     renderApp(<Navbar />);
 
     await userEvent.selectOptions(screen.getByLabelText(/language/i), 'tr');
-    expect(localStorage.getItem('codecloud_language')).toBe('tr');
+    expect(localStorage.getItem('mihenk_language')).toBe('tr');
   });
 
   it('sets the document language, which assistive technology reads', async () => {

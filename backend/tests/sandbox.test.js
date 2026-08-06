@@ -4,10 +4,10 @@ import sandboxModule from '../src/services/sandbox.js';
 const { buildDockerArgs, imageFor, resolveBackend, resetDockerProbe } = sandboxModule;
 
 const baseArgs = {
-  image: 'codecloud-python-sandbox',
-  workDir: '/tmp/codecloud-exec/abc',
+  image: 'mihenk-python-sandbox',
+  workDir: '/tmp/mihenk-exec/abc',
   command: 'python3 main.py',
-  containerName: 'codecloud-run-1',
+  containerName: 'mihenk-run-1',
   memoryMb: 256,
   cpus: 0.5,
   pidsLimit: 64,
@@ -56,12 +56,12 @@ describe('docker sandbox flags', () => {
   it('removes the container afterwards and names it so it can be killed', () => {
     expect(args).toContain('--rm');
     const idx = args.indexOf('--name');
-    expect(args[idx + 1]).toBe('codecloud-run-1');
+    expect(args[idx + 1]).toBe('mihenk-run-1');
   });
 
   it('mounts only the run directory, at a fixed path', () => {
     const idx = args.indexOf('-v');
-    expect(args[idx + 1]).toBe('/tmp/codecloud-exec/abc:/sandbox:rw');
+    expect(args[idx + 1]).toBe('/tmp/mihenk-exec/abc:/sandbox:rw');
     // Exactly one bind mount - nothing else from the host is exposed.
     expect(args.filter((a) => a === '-v')).toHaveLength(1);
   });
@@ -74,13 +74,13 @@ describe('docker sandbox flags', () => {
     const java = buildDockerArgs({ ...baseArgs, memoryMb: 384, image: imageFor('java') });
     expect(java).toContain('--memory=384m');
     expect(java).toContain('--network=none');
-    expect(java).toContain('codecloud-java-sandbox');
+    expect(java).toContain('mihenk-java-sandbox');
   });
 });
 
 describe('image naming', () => {
   it('derives the image from the language', () => {
-    expect(imageFor('python', 'codecloud')).toBe('codecloud-python-sandbox');
+    expect(imageFor('python', 'mihenk')).toBe('mihenk-python-sandbox');
     expect(imageFor('cpp', 'myorg')).toBe('myorg-cpp-sandbox');
   });
 });
@@ -95,7 +95,7 @@ describe('backend selection', () => {
   it('refuses to run rather than silently downgrading when docker is required', async () => {
     // Point the CLI at a socket that cannot exist.
     const previous = process.env.DOCKER_HOST;
-    process.env.DOCKER_HOST = 'unix:///nonexistent/codecloud-test.sock';
+    process.env.DOCKER_HOST = 'unix:///nonexistent/mihenk-test.sock';
     try {
       await expect(resolveBackend('docker')).rejects.toThrow(/Refusing to execute/i);
     } finally {

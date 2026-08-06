@@ -1,4 +1,4 @@
--- CodeCloud - Cloud-Based Coding Education and Exam System
+-- Mihenk - Cloud-Based Coding Education and Exam System
 -- Database Schema (PostgreSQL 12+)
 --
 -- All point-in-time columns are TIMESTAMPTZ, not TIMESTAMP. The API writes

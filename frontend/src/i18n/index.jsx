@@ -21,7 +21,7 @@ export const LANGUAGES = [
   { code: 'en', label: 'English' },
 ];
 
-const STORAGE_KEY = 'codecloud_language';
+const STORAGE_KEY = 'mihenk_language';
 
 /** Remembered choice, else the browser's preference, else English. */
 function initialLanguage() {
