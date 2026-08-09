@@ -10,7 +10,7 @@ import checker from '../src/services/checker.service.js';
 import verdictModule from '../src/services/verdict.service.js';
 import schemas from '../src/validation/schemas.js';
 
-const { check, normalize, sameMultiset, numbersClose, CHECKERS } = checker;
+const { check, normalize, sameMultiset, numbersClose, CHECKERS, REGEX_TIMEOUT_MS } = checker;
 const { classify, summarize, VERDICTS } = verdictModule;
 
 const passes = (...args) => check(...args).passed;
@@ -183,6 +183,55 @@ describe('regex checker', () => {
     const r = check('anything', '([unclosed', 'regex');
     expect(r.passed).toBe(false);
     expect(r.reason).toMatch(/invalid checker pattern/i);
+  });
+
+  // The checker is the one place a teacher's input runs outside the sandbox.
+  // Before v2.0.1 it ran with no bound at all, so a pattern like these - which
+  // a person writes by accident, not by malice - pinned a grading worker for
+  // as long as the process lived. With the pool sized to the queue, a handful
+  // of them during an exam is a stopped queue.
+  describe('catastrophic backtracking is bounded', () => {
+    // Each of these is exponential in the length of the input. Deliberately
+    // sized so that an unbounded match would not finish during this century,
+    // making "the test passed quickly" the only outcome that can mean the
+    // deadline works. A time assertion alone would not: it also passes if the
+    // pattern happens to be fast.
+    const catastrophic = [
+      ['nested quantifier', '(a+)+', 'a'.repeat(64) + '!'],
+      ['overlapping alternation', '(a|a)*', 'a'.repeat(64) + '!'],
+      ['quantified word chars', '(\\w+\\s?)*', 'x'.repeat(48) + '!'],
+      ['adjacent quantifiers', '(x+x+)+y', 'x'.repeat(64)],
+    ];
+
+    it.each(catastrophic)('stops "%s" and says so', (_name, pattern, output) => {
+      const started = Date.now();
+      const r = check(output, pattern, 'regex');
+      const elapsed = Date.now() - started;
+
+      expect(r.passed).toBe(false);
+      expect(r.reason).toMatch(/did not finish/i);
+      // Names the problem rather than the student: the submission was never
+      // judged, and whoever reads the failure needs to know that.
+      expect(r.reason).toMatch(/fault in the problem/i);
+      // Slack for a loaded CI runner; the point is that it returned at all.
+      expect(elapsed).toBeLessThan(REGEX_TIMEOUT_MS * 8);
+    });
+
+    it('goes on grading correctly after a pattern has been stopped', () => {
+      // The deadline shares one compiled script and one context across every
+      // check, so an interrupted match must not leave that machinery unusable
+      // for the next student in the queue.
+      expect(check('a'.repeat(64) + '!', '(a+)+', 'regex').passed).toBe(false);
+      expect(passes('451', '\\d{3}', 'regex')).toBe(true);
+      expect(passes('yes', 'YES', 'regex', { flags: 'i' })).toBe(true);
+      expect(passes('the answer is 451', '\\d{3}', 'regex')).toBe(false);
+    });
+
+    it('does not charge an honest pattern for the machinery', () => {
+      const started = Date.now();
+      for (let i = 0; i < 500; i++) passes('4510', '\\d{4}', 'regex');
+      expect(Date.now() - started).toBeLessThan(REGEX_TIMEOUT_MS);
+    });
   });
 });
 

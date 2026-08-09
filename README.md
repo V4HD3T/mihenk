@@ -1,7 +1,7 @@
 # Mihenk
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 2.0.0**
+**Version 2.0.1**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade

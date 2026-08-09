@@ -2,6 +2,67 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.1] - The Checker Gets a Deadline
+
+Closes the one item v0.1.2 listed and left open: the `regex` checker compiled a
+teacher-supplied pattern and ran it with no bound, in the worker process rather
+than inside a container. It is the only place in the system where input that is
+not a student's submission executes outside the sandbox.
+
+### Fixed
+- **A catastrophically backtracking checker pattern pinned a grading worker.**
+  `(a+)+` against sixty-four characters does not finish in any useful sense of
+  the word, and nothing was going to stop it: the match holds the thread, so the
+  worker takes no further jobs, answers no IPC, and reports no metrics for as
+  long as the process lives.
+
+  The failure mode that matters is not an attack. A teacher writing a pattern
+  for "one or more words, optionally spaced" reaches for `(\w+\s?)*` by ordinary
+  reasoning, and it is exponential. With the pool sized to the queue since
+  v0.0.8, a few submissions against that problem take out workers one at a time
+  while the backlog they are measured against keeps growing — the supervisor
+  responds by starting more workers into the same pattern. During an exam that
+  is a stopped queue, and the alert it trips (`MihenkQueueBacklog`) describes
+  the symptom rather than the cause.
+
+  The match now runs under a 250 ms deadline. **No pattern changes meaning** —
+  the engine, the dialect and the anchoring are exactly what they were, so
+  lookahead and backreferences still work and no existing problem is affected.
+
+  A timed-out match fails the test case and says why, in the same shape a
+  malformed pattern has failed since v0.0.7. It fails closed on purpose: the
+  answer was never judged, so calling it correct would hide the fault. The
+  wording states that the fault is in the problem and not in the submission,
+  because a student reads it too and a teacher can lift it with the grade
+  override that v0.2.0 added.
+
+### Note on the mechanism
+V8 does not yield while matching, so a runaway pattern cannot be bounded by
+anything written in ordinary JavaScript: a timer, an `AbortSignal` or a
+`Promise.race` all wait their turn behind a match that never returns. The
+deadline therefore comes from `node:vm`, whose timeout is a watchdog inside the
+isolate that V8's regex engine does check. The pattern crosses into that context
+as data and never as source text — interpolating it into the snippet would turn
+a checker into an `eval`.
+
+This was measured rather than assumed, on both Node majors the project runs:
+22, which the images are built from, and 24, which CI uses. Four catastrophic
+shapes, all four interrupted on both.
+
+### Verified
+241 backend tests (was 235) and 50 frontend tests, both lint suites clean,
+production build green.
+
+Mutation-tested, as usual. Reporting a timed-out match as a pass: five tests
+failed. Dropping the `timeout` option and leaving everything else in place: the
+suite **never finished** and had to be killed from outside after 30 s — vitest's
+own five-second per-test timeout could not fire either, which is the same fact
+about the event loop that the defect was made of, and the reason a test that
+merely measured elapsed time would not have been enough.
+
+Cost of the machinery on patterns that behave: ~42 µs per check, against the
+~159 ms a test case already spends starting its container.
+
 ## [2.0.0] - Mihenk
 
 The project is renamed from CodeCloud to **Mihenk**. A *mihenk taşı* is a

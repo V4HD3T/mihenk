@@ -1,6 +1,6 @@
 {
   "name": "mihenk-frontend",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Cloud-Based Multi-Platform Coding Education and Exam System - Frontend",
   "type": "module",
   "scripts": {
