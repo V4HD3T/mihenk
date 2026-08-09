@@ -172,6 +172,42 @@ every test-case row shared it, and one `htmlFor` pointed at an element that did 
 teacher pages joined the axe suite, which immediately found a broken heading order. Dates had
 been formatted `en-US` everywhere, so a Turkish reader saw 03/04/2026 for 4 March.
 
+v0.1.2 is a security release. An audit of the API found that a scheduled exam's questions were
+readable by any enrolled student before the exam opened: every access check asked one question —
+is this user in the problem's course? — and an exam's problems belong to that course by
+construction. Submitting was the worse leak, because a submission carrying no `exam_id` skipped
+the exam-window check entirely and reported which *hidden* tests passed — an oracle for the paper
+rather than a copy of it. Exam problems are now sealed until the exam starts, join codes come from
+`crypto.randomInt` instead of `Math.random()`, and a student's progress denominator no longer
+counts every problem on the server.
+
+v0.2.0 is almost entirely frontend, and adds no endpoints. The v0.1.2 audit had turned up
+something other than bugs: the backend was roughly a release ahead of the interface. Extra time,
+grade overrides, randomised exam pools, the cross-semester archive, course archiving and problem
+editing were all built, tested and documented — and reachable only with curl, four of them listed
+as shipped features. This release wired them up and added a student detail page and submission
+history. Routes are now code-split, so the entry chunk drops from 739.83 kB to 258.25 kB and a
+signed-out visitor no longer downloads the charting library and the teacher screens to reach a
+login form.
+
+v1.0.0 closed the gap between what the system does and what anyone outside it can find out: an
+OpenAPI 3.1 description of all 54 routes, a provisioned Grafana dashboard, nine Prometheus alerts
+and `VERSIONING.md`. Writing the dashboard exposed the release's largest defect — the grading
+workers had been instrumented since v0.0.8 and nothing could read any of it, because every counter
+was written to a registry inside a forked process with no way out. Half the instrumentation
+existed and none of it was reachable, which is worse than not having it: an empty graph reads as
+"nothing is happening" rather than "this is not wired up".
+
+v2.0.0 renames the project from CodeCloud to **Mihenk**. A *mihenk taşı* is a touchstone — the
+stone you rub gold against, judging its purity by the streak it leaves — which is what this system
+does to a submission. No behaviour changes, no schema migration, and every HTTP route and
+WebSocket message is untouched; it is a major release because the name reaches into the compose
+project name, the `DB_NAME`/`DB_USER` defaults, every metric, the image names and the browser
+storage keys. **Upgrading an existing install needs care** — the compose project name in
+particular decides which data volumes the stack finds, so bringing the new stack up over an old
+one silently starts with an empty database. `CHANGELOG.md` lists the six breaking points in order
+of what they cost to get wrong.
+
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants
 a stronger boundary than a shared kernel — gVisor or a Firecracker micro-VM under the container
