@@ -39,6 +39,27 @@ function courseScope(user, courseColumn, nextParamIndex) {
 }
 
 /**
+ * A SQL fragment matching the exams `userParam` actually sits.
+ *
+ * An empty roster means the whole course sits the exam. That is not a special
+ * case bolted on for compatibility - it is the common one, since most exams are
+ * simply "everybody", and it means adding this table changed no existing exam.
+ *
+ * Written as a fragment against an exam-id column so it can be dropped into the
+ * visibility gate, the exam list and the exam lookup without three subtly
+ * different versions of the same rule.
+ */
+function examRosterSql(examIdColumn, userParam) {
+  return `(
+    NOT EXISTS (SELECT 1 FROM exam_roster sit_r WHERE sit_r.exam_id = ${examIdColumn})
+    OR EXISTS (
+      SELECT 1 FROM exam_roster sit_r2
+      WHERE sit_r2.exam_id = ${examIdColumn} AND sit_r2.user_id = ${userParam}
+    )
+  )`;
+}
+
+/**
  * A SQL fragment that hides a scheduled exam's problems until it starts.
  *
  * Course membership alone is the wrong test for an exam paper: an exam's
@@ -48,32 +69,56 @@ function courseScope(user, courseColumn, nextParamIndex) {
  * person ever see this?"; this answers "may they see it yet?".
  *
  * The rule: a problem in no exam is ordinary practice material and always
- * visible. A problem in one or more exams becomes visible once any of those
- * exams has started, and stays visible afterwards so students can review their
- * paper. Teachers are never gated - they write the things.
+ * visible. A problem in one or more exams becomes visible once an exam holding
+ * it *that this student sits* has started, and stays visible afterwards so they
+ * can review their paper. Teachers are never gated - they write the things.
  *
- * Known limitation: two sittings of the same paper in one course (a make-up
- * exam a day later) share visibility, because an exam has no roster of its own -
- * once the first sitting opens, the problems are readable by everyone in the
- * course. Per-exam rosters would fix it and are not modelled yet.
+ * The roster clause is what v0.1.2 could not write. Without it the question was
+ * asked of the course rather than of the sitting, so a make-up exam a day later
+ * had its paper published the moment the first sitting opened - to exactly the
+ * students who had not taken it yet.
  *
- * Takes no bind parameters, so it composes with courseScope without disturbing
- * the caller's parameter numbering.
+ * Takes one bind parameter (the reader's user id), so callers pass the next
+ * free index the way they already do for courseScope.
  */
-function examGateSql(problemIdColumn) {
+function examGateSql(problemIdColumn, userParam) {
   return `(
     NOT EXISTS (SELECT 1 FROM exam_problems gate_ep WHERE gate_ep.problem_id = ${problemIdColumn})
     OR EXISTS (
       SELECT 1 FROM exam_problems gate_ep2
       JOIN exams gate_x ON gate_x.id = gate_ep2.exam_id
-      WHERE gate_ep2.problem_id = ${problemIdColumn} AND gate_x.start_time <= NOW()
+      WHERE gate_ep2.problem_id = ${problemIdColumn}
+        AND gate_x.start_time <= NOW()
+        AND ${examRosterSql('gate_x.id', userParam)}
     )
   )`;
 }
 
-/** The gate, or an always-true fragment for teachers. */
-function problemVisibility(user, problemIdColumn) {
-  return user.role === 'teacher' ? 'TRUE' : examGateSql(problemIdColumn);
+/**
+ * The gate, or an always-true fragment for teachers.
+ *
+ * Returns `{ sql, params }` like courseScope. Before v2.1.0 this returned a
+ * bare string with no parameters; the roster clause needs to know who is
+ * reading, and binding that is not optional in an authorisation path.
+ */
+function problemVisibility(user, problemIdColumn, nextParamIndex) {
+  if (user.role === 'teacher') return { sql: 'TRUE', params: [] };
+  return { sql: examGateSql(problemIdColumn, `$${nextParamIndex}`), params: [user.id] };
+}
+
+/**
+ * Whether this user is entitled to sit this exam at all.
+ *
+ * Teachers are asked the ownership question instead: an exam they created is
+ * theirs whether or not they appear on its roster.
+ */
+async function sitsExam(user, examId, client = pool) {
+  if (user.role === 'teacher') return ownsExam(user, examId);
+  const { rows } = await client.query(
+    `SELECT 1 FROM exams x WHERE x.id = $1 AND ${examRosterSql('x.id', '$2')}`,
+    [examId, user.id]
+  );
+  return rows.length > 0;
 }
 
 /** Course ids the user may see, for the cases where a list is easier than a join. */
@@ -113,10 +158,11 @@ async function ownsCourse(user, courseId) {
 
 async function canAccessProblem(user, problemId) {
   const scope = courseScope(user, 'p.course_id', 2);
+  const seen = problemVisibility(user, 'p.id', 2 + scope.params.length);
   const { rows } = await pool.query(
     `SELECT 1 FROM problems p
-     WHERE p.id = $1 AND ${scope.sql} AND ${problemVisibility(user, 'p.id')}`,
-    [problemId, ...scope.params]
+     WHERE p.id = $1 AND ${scope.sql} AND ${seen.sql}`,
+    [problemId, ...scope.params, ...seen.params]
   );
   return rows.length > 0;
 }
@@ -149,11 +195,18 @@ async function ownsExam(user, examId) {
   return rows.length > 0;
 }
 
+/**
+ * Course scope and, for a student, the roster. An exam someone is not sitting
+ * is not theirs to see at all - not its title, not when it runs. Anything less
+ * would tell the main cohort that a second sitting of their paper exists.
+ */
 async function canAccessExam(user, examId) {
   const scope = courseScope(user, 'x.course_id', 2);
+  const roster =
+    user.role === 'teacher' ? 'TRUE' : examRosterSql('x.id', `$${2 + scope.params.length}`);
   const { rows } = await pool.query(
-    `SELECT 1 FROM exams x WHERE x.id = $1 AND ${scope.sql}`,
-    [examId, ...scope.params]
+    `SELECT 1 FROM exams x WHERE x.id = $1 AND ${scope.sql} AND ${roster}`,
+    user.role === 'teacher' ? [examId, ...scope.params] : [examId, ...scope.params, user.id]
   );
   return rows.length > 0;
 }
@@ -199,7 +252,9 @@ async function allocateJoinCode() {
 module.exports = {
   courseScope,
   examGateSql,
+  examRosterSql,
   problemVisibility,
+  sitsExam,
   accessibleCourseIds,
   canAccessCourse,
   ownsCourse,

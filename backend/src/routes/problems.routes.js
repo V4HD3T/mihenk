@@ -14,6 +14,9 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const scope = access.courseScope(req.user, 'p.course_id', 2);
     const courseId = Number(req.query.course_id) || null;
+    // $1 is the caller, $2 the course scope, $3 the optional course filter, so
+    // the visibility gate binds from $4.
+    const seen = access.problemVisibility(req.user, 'p.id', 3 + scope.params.length);
     const result = await pool.query(
       `SELECT p.id, p.title, p.difficulty, p.created_at, p.course_id,
               c.title AS course_title, u.name AS created_by_name,
@@ -22,11 +25,11 @@ router.get('/', requireAuth, async (req, res) => {
        JOIN courses c ON c.id = p.course_id
        LEFT JOIN users u ON u.id = p.created_by
        LEFT JOIN submissions s ON s.problem_id = p.id
-       WHERE ${scope.sql} AND ${access.problemVisibility(req.user, 'p.id')}
+       WHERE ${scope.sql} AND ${seen.sql}
              AND ($3::int IS NULL OR p.course_id = $3)
        GROUP BY p.id, c.title, u.name
        ORDER BY p.created_at DESC`,
-      [req.user.id, ...scope.params, courseId]
+      [req.user.id, ...scope.params, courseId, ...seen.params]
     );
     res.json({ problems: result.rows });
   } catch (err) {
@@ -43,10 +46,11 @@ router.get('/:id', requireAuth, async (req, res) => {
     // for an exam paper whose exam has not started - a student learns nothing
     // from the difference between "not yours" and "not yet".
     const scope = access.courseScope(req.user, 'p.course_id', 2);
+    const seen = access.problemVisibility(req.user, 'p.id', 2 + scope.params.length);
     const problemResult = await pool.query(
       `SELECT p.* FROM problems p
-       WHERE p.id = $1 AND ${scope.sql} AND ${access.problemVisibility(req.user, 'p.id')}`,
-      [req.params.id, ...scope.params]
+       WHERE p.id = $1 AND ${scope.sql} AND ${seen.sql}`,
+      [req.params.id, ...scope.params, ...seen.params]
     );
     if (problemResult.rows.length === 0) {
       return res.status(404).json({ error: 'Problem not found' });

@@ -947,7 +947,7 @@ const paths = {
       tags: ['Exams'],
       summary: 'Schedule an exam',
       description:
-        'Every problem must belong to the same course as the exam. Points are divided evenly across the problems and always total 100.',
+        'Every problem must belong to the same course as the exam. `problem_ids` is ordered: position N in the array is question N on the paper. Points are hand-set through `points` when supplied and otherwise divided evenly to total 100.',
       security: bearer,
       requestBody: {
         required: true,
@@ -961,11 +961,43 @@ const paths = {
             start_time: { type: 'string', format: 'date-time' },
             end_time: { type: 'string', format: 'date-time' },
             duration_minutes: { type: 'integer', minimum: 1 },
-            problem_ids: { type: 'array', minItems: 1, items: { type: 'integer' } },
+            problem_ids: {
+              type: 'array',
+              minItems: 1,
+              items: { type: 'integer' },
+              description: 'Ordered. The array order is the order of the paper.',
+            },
+            points: {
+              type: 'array',
+              items: { type: 'integer', minimum: 0, maximum: 1000 },
+              description:
+                'Parallel to problem_ids. Omit for the even split; supplying a partial list is a 400.',
+            },
             problems_per_student: {
               type: 'integer',
               nullable: true,
               description: 'Ignored unless it is smaller than the number of problems.',
+            },
+            late_window_minutes: {
+              type: 'integer',
+              minimum: 0,
+              maximum: 1440,
+              default: 0,
+              description:
+                'Minutes past the student’s effective deadline during which a submission is still accepted, flagged late. 0 refuses everything after the deadline, which is the behaviour before v2.1.0.',
+            },
+            late_penalty_percent: {
+              type: 'integer',
+              minimum: 0,
+              maximum: 100,
+              default: 0,
+              description: 'Deducted from the automatic score of a submission accepted late.',
+            },
+            user_ids: {
+              type: 'array',
+              items: { type: 'integer' },
+              description:
+                'Who sits this exam. Omit or leave empty and the whole course sits it. Everyone named must already be enrolled in the course.',
             },
           },
         }),
@@ -987,7 +1019,7 @@ const paths = {
       tags: ['Exams'],
       summary: 'One exam and the caller’s paper',
       description:
-        'Before the exam starts, a student receives the exam but an empty problem list, and no random deal is recorded. Teachers always see the whole pool.',
+        'Before the exam starts, a student receives the exam but an empty problem list, and no random deal is recorded. Teachers always see the whole pool. Problems come back in the teacher’s order. A student who is not on the exam’s roster gets 404, the same answer as an exam in another course.',
       security: bearer,
       parameters: [idParam()],
       responses: {
@@ -1005,6 +1037,103 @@ const paths = {
             },
           },
         }),
+        404: { $ref: '#/components/responses/NotFound' },
+        ...authErrors,
+      },
+    },
+    put: {
+      tags: ['Exams'],
+      summary: 'Edit an exam',
+      description:
+        'The owning teacher only. The paper is replaced wholesale rather than merged, so send the full ordered `problem_ids`. Deals held by students for problems no longer on the paper are discarded.',
+      security: bearer,
+      parameters: [idParam()],
+      requestBody: {
+        required: true,
+        ...json({
+          type: 'object',
+          required: ['title', 'start_time', 'end_time', 'duration_minutes', 'problem_ids'],
+          properties: {
+            title: { type: 'string', maxLength: 200 },
+            description: { type: 'string' },
+            start_time: { type: 'string', format: 'date-time' },
+            end_time: { type: 'string', format: 'date-time' },
+            duration_minutes: { type: 'integer', minimum: 1 },
+            problem_ids: { type: 'array', minItems: 1, items: { type: 'integer' } },
+            points: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 1000 } },
+            problems_per_student: { type: 'integer', nullable: true },
+            late_window_minutes: { type: 'integer', minimum: 0, maximum: 1440 },
+            late_penalty_percent: { type: 'integer', minimum: 0, maximum: 100 },
+          },
+        }),
+      },
+      responses: {
+        200: ok('Updated', {
+          type: 'object',
+          properties: { exam: { $ref: '#/components/schemas/Exam' } },
+        }),
+        400: { $ref: '#/components/responses/BadRequest' },
+        404: { $ref: '#/components/responses/NotFound' },
+        ...authErrors,
+      },
+    },
+  },
+
+  '/api/exams/{id}/roster': {
+    get: {
+      tags: ['Exams'],
+      summary: 'Who sits this exam',
+      description:
+        'The owning teacher only. An empty roster is not "nobody" but "the whole course", which is what `whole_course` distinguishes.',
+      security: bearer,
+      parameters: [idParam()],
+      responses: {
+        200: ok('The roster', {
+          type: 'object',
+          properties: {
+            roster: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  user_id: { type: 'integer' },
+                  name: { type: 'string' },
+                  email: { type: 'string' },
+                  added_at: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+            whole_course: { type: 'boolean' },
+          },
+        }),
+        404: { $ref: '#/components/responses/NotFound' },
+        ...authErrors,
+      },
+    },
+    put: {
+      tags: ['Exams'],
+      summary: 'Set who sits this exam',
+      description:
+        'The owning teacher only. Replaces the whole roster; an empty list hands the exam back to the entire course. Everyone named must be a student already enrolled in the course, so a roster cannot be used as a second enrolment path. Students removed from the roster lose any randomised deal they were holding.',
+      security: bearer,
+      parameters: [idParam()],
+      requestBody: {
+        required: true,
+        ...json({
+          type: 'object',
+          required: ['user_ids'],
+          properties: { user_ids: { type: 'array', items: { type: 'integer' } } },
+        }),
+      },
+      responses: {
+        200: ok('Saved', {
+          type: 'object',
+          properties: {
+            roster: { type: 'array', items: { type: 'integer' } },
+            whole_course: { type: 'boolean' },
+          },
+        }),
+        400: { $ref: '#/components/responses/BadRequest' },
         404: { $ref: '#/components/responses/NotFound' },
         ...authErrors,
       },

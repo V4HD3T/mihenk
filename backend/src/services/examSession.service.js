@@ -31,7 +31,7 @@ async function assignedProblemIds(examId, userId, client = pool) {
   const perStudent = examResult.rows[0].problems_per_student;
 
   const poolResult = await client.query(
-    'SELECT problem_id FROM exam_problems WHERE exam_id = $1 ORDER BY problem_id',
+    'SELECT problem_id FROM exam_problems WHERE exam_id = $1 ORDER BY position, problem_id',
     [examId]
   );
   const poolIds = poolResult.rows.map((r) => r.problem_id);
@@ -108,17 +108,43 @@ async function hasStarted(examId, client = pool) {
 /**
  * Is this student allowed to be working on this exam right now?
  * Their personal end time is what counts, not the exam's nominal one.
+ *
+ * Three outcomes rather than two since v2.1.0. Between the deadline and the end
+ * of the exam's late window the answer is still yes, flagged `late` and carrying
+ * the penalty in force - an exam either took your work or refused it before,
+ * so a submission that landed forty seconds after the deadline scored what one
+ * that was never written scored.
+ *
+ * The late window is measured from the student's *effective* deadline, so an
+ * accommodation and a late window add rather than overlap. Extra time is a
+ * different thing from lateness: one says the deadline was never really at that
+ * hour for this student, the other says they missed it and it cost them.
  */
 async function isWindowOpen(examId, userId, client = pool) {
-  const { rows } = await client.query('SELECT start_time FROM exams WHERE id = $1', [examId]);
+  const { rows } = await client.query(
+    'SELECT start_time, late_window_minutes, late_penalty_percent FROM exams WHERE id = $1',
+    [examId]
+  );
   if (rows.length === 0) return { open: false, reason: 'not_found' };
 
   const now = new Date();
   if (now < new Date(rows[0].start_time)) return { open: false, reason: 'not_started' };
 
   const end = await effectiveEndTime(examId, userId, client);
-  if (now > end) return { open: false, reason: 'ended' };
-  return { open: true, endsAt: end };
+  if (now <= end) return { open: true, late: false, endsAt: end };
+
+  const graceMs = Number(rows[0].late_window_minutes || 0) * 60_000;
+  const lateUntil = new Date(end.getTime() + graceMs);
+  if (graceMs > 0 && now <= lateUntil) {
+    return {
+      open: true,
+      late: true,
+      endsAt: end,
+      lateUntil,
+      latePenaltyPercent: Number(rows[0].late_penalty_percent || 0),
+    };
+  }
+  return { open: false, reason: 'ended' };
 }
 
 module.exports = { assignedProblemIds, effectiveEndTime, hasStarted, isWindowOpen, pickRandom };

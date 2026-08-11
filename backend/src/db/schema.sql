@@ -26,6 +26,7 @@ DROP TABLE IF EXISTS submission_drafts CASCADE;
 DROP TABLE IF EXISTS exam_grade_overrides CASCADE;
 DROP TABLE IF EXISTS exam_accommodations CASCADE;
 DROP TABLE IF EXISTS exam_assignments CASCADE;
+DROP TABLE IF EXISTS exam_roster CASCADE;
 DROP TABLE IF EXISTS enrollments CASCADE;
 DROP TABLE IF EXISTS courses CASCADE;
 DROP TABLE IF EXISTS submissions CASCADE;
@@ -141,6 +142,12 @@ CREATE TABLE exams (
   -- NULL = every student sees every problem. A number deals each student that
   -- many problems at random from the exam's pool.
   problems_per_student INTEGER,
+  -- How long after the deadline a submission is still accepted, and what it
+  -- costs. 0/0 is the pre-v2.1.0 behaviour: nothing is accepted late.
+  late_window_minutes INTEGER NOT NULL DEFAULT 0
+    CHECK (late_window_minutes >= 0 AND late_window_minutes <= 1440),
+  late_penalty_percent INTEGER NOT NULL DEFAULT 0
+    CHECK (late_penalty_percent >= 0 AND late_penalty_percent <= 100),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -149,8 +156,27 @@ CREATE TABLE exam_problems (
   exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
   problem_id INTEGER NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
   points INTEGER NOT NULL DEFAULT 100,
+  -- The order the teacher wants to ask the questions in. Without it a paper ran
+  -- in primary-key order, so a warm-up written last sorted to the end.
+  position INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (exam_id, problem_id)
 );
+
+-- Who sits this exam.
+--
+-- Emptiness is meaningful: no rows means the whole course sits it, which is how
+-- every exam behaved before v2.1.0. Rows mean exactly those students sit it, and
+-- the paper is invisible to everyone else in the course - which is what makes a
+-- make-up sitting of the same paper safe to schedule.
+CREATE TABLE exam_roster (
+  exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (exam_id, user_id)
+);
+
+CREATE INDEX idx_exam_roster_user ON exam_roster (user_id, exam_id);
 
 -- Code submissions (both free practice and exam submissions)
 CREATE TABLE submissions (
@@ -168,6 +194,12 @@ CREATE TABLE submissions (
   -- accepted | wrong_answer | time_limit_exceeded | memory_limit_exceeded |
   -- runtime_error | compile_error | output_limit_exceeded
   verdict VARCHAR(30),
+  -- Whether this one landed in the exam's late window, and the penalty in force
+  -- when it did. Both are recorded rather than recomputed at read time, so a
+  -- grade cannot move because someone edited an accommodation or lowered the
+  -- penalty weeks after the paper was graded.
+  is_late BOOLEAN NOT NULL DEFAULT FALSE,
+  late_penalty_percent INTEGER NOT NULL DEFAULT 0,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -286,4 +318,5 @@ INSERT INTO schema_migrations (filename) VALUES
   ('006_timestamptz.sql'),
   ('007_evaluation.sql'),
   ('008_similarity_archive.sql'),
-  ('009_account_recovery.sql');
+  ('009_account_recovery.sql'),
+  ('010_exam_paper_control.sql');

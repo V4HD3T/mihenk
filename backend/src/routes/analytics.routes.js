@@ -81,10 +81,11 @@ router.get('/me', requireAuth, async (req, res) => {
     // the server - including courses the student had never joined, and papers
     // for exams that have not started.
     const scope = access.courseScope(req.user, 'p.course_id', 1);
+    const seen = access.problemVisibility(req.user, 'p.id', 1 + scope.params.length);
     const totalProblems = await pool.query(
       `SELECT COUNT(*) AS count FROM problems p
-       WHERE ${scope.sql} AND ${access.problemVisibility(req.user, 'p.id')}`,
-      scope.params
+       WHERE ${scope.sql} AND ${seen.sql}`,
+      [...scope.params, ...seen.params]
     );
 
     res.json({

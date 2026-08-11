@@ -44,23 +44,25 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
     // entirely, so "practise" against tomorrow's paper ran its hidden tests and
     // reported which ones passed - a better oracle than simply reading it.
     const scope = access.courseScope(req.user, 'p.course_id', 2);
+    const seen = access.problemVisibility(req.user, 'p.id', 2 + scope.params.length);
     const problemResult = await pool.query(
       `SELECT p.id FROM problems p
-       WHERE p.id = $1 AND ${scope.sql} AND ${access.problemVisibility(req.user, 'p.id')}`,
-      [problem_id, ...scope.params]
+       WHERE p.id = $1 AND ${scope.sql} AND ${seen.sql}`,
+      [problem_id, ...scope.params, ...seen.params]
     );
     if (problemResult.rows.length === 0) {
       return res.status(404).json({ error: 'Problem not found' });
     }
 
     // For exam submissions, validate the window and the student's own problem set
+    let late = { isLate: false, penaltyPercent: 0 };
     if (exam_id) {
-      const examScope = access.courseScope(req.user, 'x.course_id', 2);
-      const examResult = await pool.query(
-        `SELECT x.id FROM exams x WHERE x.id = $1 AND ${examScope.sql}`,
-        [exam_id, ...examScope.params]
-      );
-      if (examResult.rows.length === 0) return res.status(404).json({ error: 'Exam not found' });
+      // Not sitting this exam is a 404, exactly like not being in the course:
+      // a student on the main sitting learns nothing about the make-up paper,
+      // including that it exists.
+      if (!(await access.canAccessExam(req.user, exam_id))) {
+        return res.status(404).json({ error: 'Exam not found' });
+      }
 
       // Uses the student's *effective* deadline, so a granted accommodation is
       // honoured here and not only when the exam page loads.
@@ -73,6 +75,11 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
               : 'This exam is no longer accepting submissions',
         });
       }
+      // Accepted, but after the deadline and inside the exam's late window. The
+      // penalty in force right now is stamped onto the row rather than looked up
+      // at read time, so a teacher who changes it later does not silently
+      // re-mark work that was already graded under the old one.
+      late = { isLate: Boolean(window.late), penaltyPercent: window.latePenaltyPercent || 0 };
 
       // With a randomised pool, answering a problem you weren't dealt would
       // otherwise be a way to see the whole pool.
@@ -91,9 +98,18 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
     }
 
     const insertResult = await pool.query(
-      `INSERT INTO submissions (user_id, problem_id, exam_id, language, code, status, passed_count, total_count, execution_time_ms)
-       VALUES ($1, $2, $3, $4, $5, 'queued', 0, $6, 0) RETURNING *`,
-      [req.user.id, problem_id, exam_id || null, language, code, testCasesResult.rows.length]
+      `INSERT INTO submissions (user_id, problem_id, exam_id, language, code, status, passed_count, total_count, execution_time_ms, is_late, late_penalty_percent)
+       VALUES ($1, $2, $3, $4, $5, 'queued', 0, $6, 0, $7, $8) RETURNING *`,
+      [
+        req.user.id,
+        problem_id,
+        exam_id || null,
+        language,
+        code,
+        testCasesResult.rows.length,
+        late.isLate,
+        late.penaltyPercent,
+      ]
     );
     const submission = insertResult.rows[0];
 

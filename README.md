@@ -1,7 +1,7 @@
 # Mihenk
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 2.0.1**
+**Version 2.1.0**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
@@ -109,7 +109,8 @@ Problems and exams belong to a course, and you only ever see the courses you are
 | Cloud-native execution (scalable, matching the original "cloud computing" brief) | BullMQ/Redis queue + horizontally-scalable `npm run worker` processes |
 | Safe execution of untrusted code | Per-run Docker containers: no network, read-only rootfs, memory/CPU/pid limits, unprivileged uid |
 | Per-class separation of students and content | Courses + enrolment: students see only the courses they joined, teachers only the ones they own |
-| Exam integrity and fairness | Randomised per-student problem pools, tab/paste/fullscreen monitoring, per-student time extensions, teacher grade overrides |
+| Exam integrity and fairness | Randomised per-student problem pools, per-exam rosters so a make-up sitting is invisible to the students still due to take it, tab/paste/fullscreen monitoring, per-student time extensions, teacher grade overrides |
+| Setting the paper | Question order, marks per question, and a late window with a penalty that is recorded on the submission rather than recomputed later |
 | Grading that doesn't punish formatting | Per-problem output checkers (float tolerance, unordered, regex) and classified verdicts explaining each failure |
 | Absorbing an exam-day rush | Autoscaling worker pool sized to the queue, with Prometheus metrics; measured at 60 simultaneous submissions graded in 17s on one laptop |
 
@@ -207,6 +208,16 @@ storage keys. **Upgrading an existing install needs care** — the compose proje
 particular decides which data volumes the stack finds, so bringing the new stack up over an old
 one silently starts with an empty database. `CHANGELOG.md` lists the six breaking points in order
 of what they cost to get wrong.
+
+v2.1.0 closed the last open security item in the project. v0.1.2 had sealed exam
+papers until the exam starts and recorded what it could not fix: an exam had no
+roster, so the seal asked whether the *course's* exam had started rather than
+the student's own sitting — and a make-up sitting therefore published its paper
+to exactly the people still due to take it, the moment the first sitting opened.
+An exam now has a roster, and an empty one means the whole course, so no existing
+exam changed. The same release gave the teacher the rest of the paper: the order
+of the questions, the marks each is worth, and a late window with a penalty that
+is stamped on the submission rather than recomputed weeks later.
 
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants

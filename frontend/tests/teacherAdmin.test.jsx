@@ -203,6 +203,127 @@ describe('creating a randomised exam', () => {
   });
 });
 
+describe('setting the paper (v2.1.0)', () => {
+  const TWO_PROBLEMS = {
+    'GET /problems': {
+      problems: [
+        { id: 1, title: 'A', difficulty: 'easy', course_id: 1 },
+        { id: 2, title: 'B', difficulty: 'easy', course_id: 1 },
+      ],
+    },
+    'GET /exams': { exams: [] },
+    // Before 'GET /courses': stubRoutes matches on a substring and takes the
+    // first key that fits, so the more specific path has to come first or the
+    // course list answers the roster call.
+    'GET /courses/1/roster': {
+      students: [
+        { id: 9, name: 'Ada', email: 'ada@x.edu' },
+        { id: 10, name: 'Grace', email: 'grace@x.edu' },
+      ],
+    },
+    'GET /courses': { courses: [COURSE] },
+    'POST /exams': { exam: { id: 3 } },
+  };
+
+  /** Opens the new-exam form with both problems chosen, in the order A then B. */
+  async function openFormWithBothProblems() {
+    signIn({ role: 'teacher' });
+    stub(TWO_PROBLEMS);
+    renderApp(<TeacherPanel />);
+    await userEvent.click(await screen.findByRole('button', { name: /^exams$/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /new exam/i }));
+    await userEvent.selectOptions(await screen.findByLabelText(/^course$/i), '1');
+    await userEvent.click(await screen.findByRole('button', { name: 'A' }));
+    await userEvent.click(screen.getByRole('button', { name: 'B' }));
+    await userEvent.type(screen.getByLabelText(/exam title/i), 'Midterm');
+    await userEvent.type(screen.getByLabelText(/^start$/i), '2026-09-01T09:00');
+    await userEvent.type(screen.getByLabelText(/^end$/i), '2026-09-01T11:00');
+  }
+
+  const sentExam = () => api.post.mock.calls.find(([url]) => url === '/exams')[1];
+
+  it('sends the questions in the order the teacher arranged them', async () => {
+    await openFormWithBothProblems();
+    // A was chosen first, so moving B up must reverse the paper - the whole
+    // point being that this is no longer the ids' order.
+    await userEvent.click(screen.getByRole('button', { name: /move b earlier/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create exam/i }));
+
+    await waitFor(() => expect(sentExam().problem_ids).toEqual([2, 1]));
+  });
+
+  it('omits points entirely when the marks are left even', async () => {
+    // Not "sends the even split it computed": the server owns that arithmetic,
+    // and two implementations of the remainder rule is one too many.
+    await openFormWithBothProblems();
+    await userEvent.click(screen.getByRole('button', { name: /create exam/i }));
+
+    await waitFor(() => expect(sentExam()).not.toHaveProperty('points'));
+  });
+
+  it('sends hand-set marks parallel to the questions', async () => {
+    await openFormWithBothProblems();
+    await userEvent.click(screen.getByLabelText(/set marks by hand/i));
+
+    const markA = screen.getByLabelText(/marks for a/i);
+    await userEvent.clear(markA);
+    await userEvent.type(markA, '70');
+    const markB = screen.getByLabelText(/marks for b/i);
+    await userEvent.clear(markB);
+    await userEvent.type(markB, '30');
+    await userEvent.click(screen.getByRole('button', { name: /create exam/i }));
+
+    await waitFor(() => {
+      const body = sentExam();
+      expect(body.problem_ids).toEqual([1, 2]);
+      expect(body.points).toEqual([70, 30]);
+    });
+  });
+
+  it('sends no roster when the whole course sits it', async () => {
+    // Absent, not an empty array: the server reads an empty roster as "the
+    // whole course", and sending [] on every create would be the same thing
+    // said in a way that is easy to get wrong later.
+    await openFormWithBothProblems();
+    await userEvent.click(screen.getByRole('button', { name: /create exam/i }));
+
+    await waitFor(() => expect(sentExam()).not.toHaveProperty('user_ids'));
+  });
+
+  it('sends only the chosen students for a second sitting', async () => {
+    await openFormWithBothProblems();
+    await userEvent.click(screen.getByLabelText(/only the students i choose/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Grace' }));
+    await userEvent.click(screen.getByRole('button', { name: /create exam/i }));
+
+    await waitFor(() => expect(sentExam().user_ids).toEqual([10]));
+  });
+
+  it('sends the late window and its penalty', async () => {
+    await openFormWithBothProblems();
+    const window = screen.getByLabelText(/grace period/i);
+    await userEvent.clear(window);
+    await userEvent.type(window, '15');
+    const penalty = screen.getByLabelText(/penalty/i);
+    await userEvent.clear(penalty);
+    await userEvent.type(penalty, '20');
+    await userEvent.click(screen.getByRole('button', { name: /create exam/i }));
+
+    await waitFor(() => {
+      const body = sentExam();
+      expect(body.late_window_minutes).toBe(15);
+      expect(body.late_penalty_percent).toBe(20);
+    });
+  });
+
+  it('defaults to accepting nothing late', async () => {
+    await openFormWithBothProblems();
+    await userEvent.click(screen.getByRole('button', { name: /create exam/i }));
+
+    await waitFor(() => expect(sentExam().late_window_minutes).toBe(0));
+  });
+});
+
 describe('exam administration', () => {
   const EXAM = {
     exam: {

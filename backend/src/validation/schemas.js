@@ -99,6 +99,45 @@ const gradeOverride = z.object({
   feedback: z.string().trim().max(2000).optional().default(''),
 });
 
+/**
+ * The paper: which problems, in which order, worth how much.
+ *
+ * `problem_ids` is ordered - position N in the array is question N on the
+ * paper - so a client that simply sends the list it already had keeps working
+ * and gets the order it was displaying. `points` is optional and parallel to
+ * it; omitted, the server divides 100 evenly the way it always has.
+ */
+const examPaper = z.object({
+  problem_ids: z.array(z.coerce.number().int().positive()).min(1, 'An exam needs at least one problem'),
+  points: z.array(z.coerce.number().int().min(0).max(1000)).optional(),
+  // Only meaningful when it narrows the pool; the route drops it otherwise.
+  problems_per_student: z.coerce.number().int().positive().nullish(),
+  // Capped at 24h for the same reason an accommodation is: a typo should not
+  // leave a paper collectable a week later.
+  late_window_minutes: z.coerce.number().int().min(0).max(1440).optional().default(0),
+  late_penalty_percent: z.coerce.number().int().min(0).max(100).optional().default(0),
+});
+
+const updateExam = examPaper.extend({
+  title: z.string().trim().min(1, 'A title is required').max(200),
+  description: z.string().trim().max(5000).optional().default(''),
+  start_time: z.coerce.date(),
+  end_time: z.coerce.date(),
+  duration_minutes: z.coerce.number().int().positive().max(1440),
+});
+
+/**
+ * The whole roster in one request rather than one call per student.
+ *
+ * An empty array is a meaningful value and not a missing one: it clears the
+ * roster, which returns the exam to being sat by the whole course. That is why
+ * this is a PUT of the entire list - "remove the last student" and "never had a
+ * roster" must be expressible and distinguishable.
+ */
+const examRoster = z.object({
+  user_ids: z.array(z.coerce.number().int().positive()),
+});
+
 const saveDraft = z.object({
   problem_id: z.coerce.number().int().positive(),
   exam_id: z.coerce.number().int().positive().nullish(),
@@ -165,6 +204,9 @@ module.exports = {
   joinCourse,
   courseUserParams,
   examUserParams,
+  examPaper,
+  updateExam,
+  examRoster,
   gradeParams,
   accommodation,
   gradeOverride,

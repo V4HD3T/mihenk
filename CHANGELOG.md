@@ -2,6 +2,113 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.1.0] - Exam Paper Control
+
+Four things a teacher could not decide about their own exam. The first is the
+last open security item in the project: v0.1.2 sealed exam papers until the exam
+starts, and wrote down the hole it could not close.
+
+### Security
+- **A make-up sitting published its paper to the students still due to take it.**
+  An exam had no roster, so "has this started?" was asked of the *course* rather
+  than of the sitting. Two sittings of one paper - a make-up a day later, which
+  is the ordinary reason to schedule one - therefore shared visibility: the
+  moment the first sitting opened, its questions became readable by everyone in
+  the course, including exactly the people who had not sat it yet.
+
+  Reproduced against a real database before the fix, in the arrangement that
+  produces it: one paper, two sittings, one running and one tomorrow.
+
+  ```
+  GET  /api/problems/:id   -> 200   description: "SECRET BODY OF ..."
+  POST /api/submissions    -> 202   (graded against the hidden tests)
+  ```
+
+  The second line is the worse one, for the same reason it was in v0.1.2:
+  reading the paper gives you the questions, submitting tells you whether your
+  answer is right.
+
+  An exam now has a roster. **An empty roster means the whole course sits the
+  exam**, which is what every exam that exists today does, so nothing changes
+  for any of them. Naming people narrows both the paper and the exam itself: a
+  student not on the roster gets 404 for the exam, and it does not appear in
+  their list at all. Listing it without its problems would still tell the main
+  cohort that a second sitting of their paper is scheduled, and when.
+
+  A roster may only name students already enrolled in the course. Otherwise it
+  would be a second, quieter enrolment path - a way to hand someone a course's
+  paper without ever putting them in the course.
+
+### Added
+- **The order of the questions.** Problems came back ordered by primary key, so
+  a paper ran in the order its questions happened to be written, and a warm-up
+  added last sorted to the end. The order the teacher arranges is now the order
+  of the paper, including for a randomised exam, which keeps the relative order
+  of whatever subset a student was dealt.
+- **Marks per question.** The column has existed since v0.0.6 and nothing could
+  set it; 100 was divided evenly and that was that. Marks are now hand-settable,
+  and a paper does not have to be out of 100. Left alone, the even split is
+  unchanged - and the client sends no marks at all in that case rather than its
+  own copy of the arithmetic, because two implementations of the remainder rule
+  is one too many.
+- **Late submissions.** An exam either accepted a submission or refused it, so
+  work that landed forty seconds after the deadline scored what work that was
+  never written scored. An exam can now define a grace period and what it costs.
+
+  Lateness and extra time are deliberately different things: the late window is
+  measured from the student's *effective* deadline, so an accommodation and a
+  grace period add rather than overlap. Extra time says the deadline was never
+  really at that hour for this student; lateness says they missed it and it cost
+  them.
+
+  Both are recorded on the submission rather than recomputed at read time. A
+  grade that moves because someone edited an accommodation, or lowered the
+  penalty, weeks after the paper was marked is not a grade anyone can defend.
+  A grade override still outranks the penalty, which is how a teacher waives one.
+- **Editing an exam** (`PUT /api/exams/:id`), which is what makes the three
+  above usable on a paper that already exists. The paper is replaced wholesale
+  rather than merged: a partial update of an ordered list is where "save" and
+  "what is on screen" drift apart. Deals held for a problem dropped from the
+  paper are discarded, so nobody is shown a question that is no longer on it.
+
+### Upgrading
+Additive. `npm run migrate` applies `010_exam_paper_control.sql`; every column
+it adds defaults to the previous behaviour, and no exam gains a roster. Rehearsed
+against a populated v2.0.1 database: data intact, `position` backfilled to the
+order those papers were already displayed in, and a second run is a no-op.
+
+### Verified
+268 backend tests (was 241) and 57 frontend tests (was 50), both lint suites
+clean, production build green, and the full backend suite run against a real
+PostgreSQL rather than skipped - 258 of the 268 execute, the remaining 10 needing
+an SMTP catcher.
+
+Mutation-tested. Making the roster clause always true - v2.0.1's behaviour,
+written so the SQL stays valid and the bind parameter is still used - failed six
+tests, and the two that matter failed by *reproducing the leak*: `200` where the
+paper should have been invisible, `202` where a practice submission should have
+been refused. Ordering the paper by problem id failed the ordering test; sending
+computed marks when the teacher had not set any failed the test that says the
+client must stay out of that arithmetic.
+
+The first attempt at that mutation was wrong and is worth recording: deleting
+the roster clause outright left an unused bind parameter, so every query 500'd
+and the tests failed for the wrong reason. A mutation that breaks the code
+instead of changing its meaning proves nothing, and it looked exactly like
+success.
+
+### Known limitations
+- A roster is a list of names, not a rule. Rescheduling one student into a
+  second sitting means editing both rosters by hand.
+- `problems_per_student` deals from the whole pool, so two sittings of one paper
+  can deal the same subset to both. The rosters keep them apart, not the deal.
+- The late window is per exam, not per problem, and the penalty is flat rather
+  than scaled by how late the work was.
+- Marks are per question. There is still no rubric or partial credit *within* a
+  question - that remains where v0.0.6 left it.
+- `POST /api/auth/resend-verification` is still unreachable, for the reason
+  given in v0.2.0.
+
 ## [2.0.1] - The Checker Gets a Deadline
 
 Closes the one item v0.1.2 listed and left open: the `regex` checker compiled a
