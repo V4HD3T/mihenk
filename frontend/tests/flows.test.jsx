@@ -317,7 +317,13 @@ describe('accessibility', () => {
       'GET /courses/1/roster': {
         students: [{ id: 7, name: 'Ada Lovelace', email: 'ada@x.edu', submission_count: 3 }],
       },
-      'GET /courses/1': { course: { id: 1, title: 'Algorithms', join_code: 'K7QP2XRT' } },
+      // Before 'GET /courses/1': stubRoutes matches on a substring and takes
+      // the first key that fits, so the course would otherwise answer this.
+      'GET /courses/1/staff': {
+        owner: { user_id: 1, name: 'Teacher', email: 't@x.edu' },
+        assistants: [{ user_id: 8, name: 'Grace Hopper', email: 'grace@x.edu' }],
+      },
+      'GET /courses/1': { course: { id: 1, title: 'Algorithms', join_code: 'K7QP2XRT', created_by: 1 } },
     });
     const { container } = renderApp(<CourseRoster />, { route: '/courses/1/roster', path: '/courses/:id/roster' });
     await screen.findByText('Ada Lovelace');

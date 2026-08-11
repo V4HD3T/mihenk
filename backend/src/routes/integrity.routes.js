@@ -186,7 +186,7 @@ router.post(
   validate({ params: schemas.idParam, body: schemas.archiveCourse }),
   async (req, res) => {
     try {
-      if (!(await access.ownsCourse(req.user, req.params.id))) {
+      if (!(await access.teachesCourse(req.user, req.params.id))) {
         return res.status(404).json({ error: 'Course not found' });
       }
 

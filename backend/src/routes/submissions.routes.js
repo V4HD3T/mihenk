@@ -53,6 +53,11 @@ router.post('/', requireAuth, validate({ body: schemas.createSubmission }), asyn
     if (problemResult.rows.length === 0) {
       return res.status(404).json({ error: 'Problem not found' });
     }
+    // Archiving stopped only joining until v2.3.0, so last term's course stayed
+    // solvable and its exams stayed open. A closed course takes no more work.
+    if (await access.problemsCourseIsArchived(problem_id)) {
+      return res.status(403).json({ error: 'This course is archived and is no longer accepting submissions' });
+    }
 
     // For exam submissions, validate the window and the student's own problem set
     let late = { isLate: false, penaltyPercent: 0 };

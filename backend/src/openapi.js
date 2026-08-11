@@ -553,6 +553,128 @@ const paths = {
     },
   },
 
+  '/api/courses/{id}/staff': {
+    get: {
+      tags: ['Courses'],
+      summary: 'Who teaches this course',
+      description:
+        'Owner and assistants. Readable by any of them; only the owner may change it.',
+      security: bearer,
+      parameters: [idParam()],
+      responses: {
+        200: ok('The teaching staff', {
+          type: 'object',
+          properties: {
+            owner: { type: 'object', additionalProperties: true, nullable: true },
+            assistants: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  user_id: { type: 'integer' },
+                  name: { type: 'string' },
+                  email: { type: 'string' },
+                  added_at: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+          },
+        }),
+        404: { $ref: '#/components/responses/NotFound' },
+        ...authErrors,
+      },
+    },
+    post: {
+      tags: ['Courses'],
+      summary: 'Appoint a teaching assistant',
+      description:
+        'The course owner only — an assistant cannot appoint assistants. The account must already exist, must be a teacher account, and must not be enrolled in the course as a student. An assistant may do everything with the course’s content (problems, exams, marking, rosters) but cannot rename, archive or delete the course, nor change its staff.',
+      security: bearer,
+      parameters: [idParam()],
+      requestBody: {
+        required: true,
+        ...json({
+          type: 'object',
+          required: ['email'],
+          properties: { email: { type: 'string', maxLength: 150 } },
+        }),
+      },
+      responses: {
+        201: ok('Appointed', {
+          type: 'object',
+          properties: { assistant: { type: 'object', additionalProperties: true } },
+        }),
+        400: { $ref: '#/components/responses/BadRequest' },
+        404: { $ref: '#/components/responses/NotFound' },
+        ...authErrors,
+      },
+    },
+  },
+
+  '/api/courses/{id}/staff/{userId}': {
+    delete: {
+      tags: ['Courses'],
+      summary: 'Stand an assistant down',
+      description: 'The course owner only.',
+      security: bearer,
+      parameters: [idParam('id', 'Course id'), idParam('userId', 'Assistant’s user id')],
+      responses: {
+        200: ok('Removed', { type: 'object', properties: { success: { type: 'boolean' } } }),
+        404: { $ref: '#/components/responses/NotFound' },
+        ...authErrors,
+      },
+    },
+  },
+
+  '/api/courses/{id}/roster/import': {
+    post: {
+      tags: ['Courses'],
+      summary: 'Enrol a list of students by email',
+      description:
+        'Enrols accounts that already exist and reports the addresses that do not. It does not create accounts: minting logins for people who have not signed up means choosing passwords for them, which is a bigger step than a roster import should take. Importing the same list twice is safe — addresses already enrolled are counted, not failed.',
+      security: bearer,
+      parameters: [idParam()],
+      requestBody: {
+        required: true,
+        ...json({
+          type: 'object',
+          required: ['emails'],
+          properties: {
+            emails: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 500,
+              items: { type: 'string', maxLength: 150 },
+            },
+          },
+        }),
+      },
+      responses: {
+        200: ok('What happened to each address', {
+          type: 'object',
+          properties: {
+            enrolled: { type: 'array', items: { type: 'string' } },
+            alreadyEnrolled: { type: 'integer' },
+            notFound: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'No account with this address. Nothing was created for them.',
+            },
+            notStudents: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'A teacher account, which is not enrolled as a student.',
+            },
+          },
+        }),
+        400: { $ref: '#/components/responses/BadRequest' },
+        403: ok('The course is archived', errorSchema),
+        404: { $ref: '#/components/responses/NotFound' },
+        ...authErrors,
+      },
+    },
+  },
+
   '/api/courses/{id}/roster': {
     get: {
       tags: ['Courses'],

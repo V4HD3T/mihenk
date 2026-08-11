@@ -28,6 +28,7 @@ DROP TABLE IF EXISTS exam_accommodations CASCADE;
 DROP TABLE IF EXISTS exam_assignments CASCADE;
 DROP TABLE IF EXISTS exam_roster CASCADE;
 DROP TABLE IF EXISTS enrollments CASCADE;
+DROP TABLE IF EXISTS course_staff CASCADE;
 DROP TABLE IF EXISTS courses CASCADE;
 DROP TABLE IF EXISTS submissions CASCADE;
 DROP TABLE IF EXISTS exam_problems CASCADE;
@@ -86,6 +87,21 @@ CREATE TABLE courses (
 );
 
 -- Which students are in which course.
+-- Teaching assistants.
+--
+-- The owner stays on courses.created_by and is not duplicated here: two places
+-- recording the same fact is two places to disagree about it. "May teach this
+-- course" is the union of the owner and these rows.
+CREATE TABLE course_staff (
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (course_id, user_id)
+);
+
+CREATE INDEX idx_course_staff_user ON course_staff (user_id, course_id);
+
 CREATE TABLE enrollments (
   course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -338,4 +354,5 @@ INSERT INTO schema_migrations (filename) VALUES
   ('008_similarity_archive.sql'),
   ('009_account_recovery.sql'),
   ('010_exam_paper_control.sql'),
-  ('011_weighted_grading.sql');
+  ('011_weighted_grading.sql'),
+  ('012_course_staff.sql');

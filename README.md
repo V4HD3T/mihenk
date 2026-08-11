@@ -1,7 +1,7 @@
 # Mihenk
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 2.2.0**
+**Version 2.3.0**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
@@ -108,7 +108,8 @@ Problems and exams belong to a course, and you only ever see the courses you are
 | Academic integrity (code similarity + exam monitoring) | `similarity.service.js` (Winnowing) + `/api/integrity/*` |
 | Cloud-native execution (scalable, matching the original "cloud computing" brief) | BullMQ/Redis queue + horizontally-scalable `npm run worker` processes |
 | Safe execution of untrusted code | Per-run Docker containers: no network, read-only rootfs, memory/CPU/pid limits, unprivileged uid |
-| Per-class separation of students and content | Courses + enrolment: students see only the courses they joined, teachers only the ones they own |
+| Per-class separation of students and content | Courses + enrolment: students see only the courses they joined, teachers only the ones they own or assist with |
+| Running a course with more than one teacher | Teaching assistants, who do everything with the course's content but cannot rename, archive, delete it or change its staff; bulk enrolment from a pasted class list |
 | Exam integrity and fairness | Randomised per-student problem pools, per-exam rosters so a make-up sitting is invisible to the students still due to take it, tab/paste/fullscreen monitoring, per-student time extensions, teacher grade overrides |
 | Setting the paper | Question order, marks per question, and a late window with a penalty that is recorded on the submission rather than recomputed later |
 | Grading that doesn't punish formatting | Output checkers per problem *and* per test case (float tolerance, unordered, regex), and classified verdicts explaining each failure |
@@ -227,6 +228,16 @@ solved the problem and missed an empty-input check scored below one who got the
 algorithm wrong and handled empty input. Cases now carry a weight and a rubric
 section, and a checker of their own where the problem's is wrong for them. Every
 existing case weighs 1, so nothing already written is re-marked.
+
+v2.3.0 closed the last three items from v0.0.5. A course can now have teaching
+assistants — who do everything with its content but cannot rename, archive or
+delete the course, nor appoint staff of their own, since an assistant who can
+appoint assistants can appoint anyone. A class can be enrolled from a pasted
+list rather than one join code at a time, and an archived course is finally
+read-only rather than merely closed to new joiners: it stops taking submissions,
+problems and exams, while staying readable so last term's work can still be
+reviewed. **That last one changes what an existing flag does** — see
+`CHANGELOG.md` before upgrading mid-term.
 
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants

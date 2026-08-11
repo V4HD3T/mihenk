@@ -27,6 +27,7 @@ const { default: ExamAdmin } = await import('../src/pages/ExamAdmin');
 const { default: ArchivePage } = await import('../src/pages/ArchivePage');
 const { default: MySubmissions } = await import('../src/pages/MySubmissions');
 const { default: Courses } = await import('../src/pages/Courses');
+const { default: CourseRoster, parseEmails } = await import('../src/pages/CourseRoster');
 
 const stub = (routes) => stubRoutes(api, routes);
 
@@ -321,6 +322,131 @@ describe('setting the paper (v2.1.0)', () => {
     await userEvent.click(screen.getByRole('button', { name: /create exam/i }));
 
     await waitFor(() => expect(sentExam().late_window_minutes).toBe(0));
+  });
+});
+
+describe('teaching staff and roster import (v2.3.0)', () => {
+  const OWNER_VIEW = {
+    'GET /courses/1/roster': {
+      students: [{ id: 7, name: 'Ada Lovelace', email: 'ada@x.edu', submission_count: 3 }],
+    },
+    'GET /courses/1/staff': {
+      owner: { user_id: 1, name: 'Teacher', email: 't@x.edu' },
+      assistants: [{ user_id: 8, name: 'Grace Hopper', email: 'grace@x.edu' }],
+    },
+    'GET /courses/1': { course: { id: 1, title: 'Algorithms', created_by: 1 } },
+  };
+
+  const renderRoster = () =>
+    renderApp(<CourseRoster />, { route: '/courses/1/roster', path: '/courses/:id/roster' });
+
+  describe('reading a pasted class list', () => {
+    // A teacher pastes what they have: a spreadsheet column, a comma-separated
+    // line, or CSV rows with names in them. Making them clean the file first is
+    // how a feature goes unused.
+    it('takes addresses out of CSV rows and ignores the rest', () => {
+      expect(parseEmails('Name,Email\nAda Lovelace,ada@x.edu\nBob Smith,bob@x.edu')).toEqual([
+        'ada@x.edu',
+        'bob@x.edu',
+      ]);
+    });
+
+    it('handles a column, a comma-separated line and stray punctuation alike', () => {
+      expect(parseEmails('ada@x.edu\nbob@x.edu')).toEqual(['ada@x.edu', 'bob@x.edu']);
+      expect(parseEmails('ada@x.edu, bob@x.edu;')).toEqual(['ada@x.edu', 'bob@x.edu']);
+      expect(parseEmails('<ada@x.edu>')).toEqual(['ada@x.edu']);
+    });
+
+    it('lowercases and de-duplicates', () => {
+      expect(parseEmails('Ada@X.edu\nada@x.edu')).toEqual(['ada@x.edu']);
+    });
+
+    it('finds nothing in text that holds no addresses', () => {
+      expect(parseEmails('no addresses here at all')).toEqual([]);
+    });
+  });
+
+  it('sends the parsed addresses, not the raw paste', async () => {
+    signIn({ role: 'teacher', id: 1 });
+    stub({ ...OWNER_VIEW, 'POST /courses/1/roster/import': { enrolled: ['ada@x.edu'], alreadyEnrolled: 0, notFound: [], notStudents: [] } });
+    renderRoster();
+
+    await userEvent.type(
+      await screen.findByLabelText(/enrol a list of students/i),
+      'Ada Lovelace,ada@x.edu'
+    );
+    await userEvent.click(screen.getByRole('button', { name: /enrol these/i }));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith('/courses/1/roster/import', {
+        emails: ['ada@x.edu'],
+      });
+    });
+  });
+
+  it('names the addresses that had no account rather than counting them', async () => {
+    // An unmatched address is usually a typo or someone who never signed up.
+    // A count tells the teacher there is a problem; the address tells them
+    // which one to chase.
+    signIn({ role: 'teacher', id: 1 });
+    stub({
+      ...OWNER_VIEW,
+      'POST /courses/1/roster/import': {
+        enrolled: ['ada@x.edu'],
+        alreadyEnrolled: 1,
+        notFound: ['ghost@x.edu'],
+        notStudents: [],
+      },
+    });
+    renderRoster();
+
+    await userEvent.type(
+      await screen.findByLabelText(/enrol a list of students/i),
+      'ada@x.edu ghost@x.edu'
+    );
+    await userEvent.click(screen.getByRole('button', { name: /enrol these/i }));
+
+    expect(await screen.findByText(/ghost@x.edu/)).toBeInTheDocument();
+  });
+
+  it('lets the owner appoint an assistant', async () => {
+    signIn({ role: 'teacher', id: 1 });
+    stub({ ...OWNER_VIEW, 'POST /courses/1/staff': { assistant: { user_id: 9 } } });
+    renderRoster();
+
+    await userEvent.type(await screen.findByLabelText(/add an assistant/i), 'grace@x.edu');
+    await userEvent.click(screen.getByRole('button', { name: /^add$/i }));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith('/courses/1/staff', { email: 'grace@x.edu' });
+    });
+  });
+
+  it('shows an assistant the staff list without the controls that are not theirs', async () => {
+    // Rendering buttons that answer 404 is worse than not rendering them: it
+    // reads as a bug in the system rather than as a boundary.
+    signIn({ role: 'teacher', id: 5 });
+    stub(OWNER_VIEW);
+    renderRoster();
+
+    expect(await screen.findByText('Grace Hopper')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/add an assistant/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /remove grace hopper from the teaching staff/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/only the course owner can change/i)).toBeInTheDocument();
+  });
+
+  it('hides the import on an archived course and says why', async () => {
+    signIn({ role: 'teacher', id: 1 });
+    stub({
+      ...OWNER_VIEW,
+      'GET /courses/1': { course: { id: 1, title: 'Algorithms', created_by: 1, archived: true } },
+    });
+    renderRoster();
+
+    expect(await screen.findByText(/this course is archived/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /enrol these/i })).not.toBeInTheDocument();
   });
 });
 

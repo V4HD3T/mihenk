@@ -75,6 +75,25 @@ const courseUserParams = z.object({
   userId: z.coerce.number().int().positive(),
 });
 
+const addStaff = z.object({
+  email: z.string().trim().toLowerCase().min(1, 'An email address is required').max(150),
+});
+
+/**
+ * A roster import.
+ *
+ * Addresses rather than a file: parsing CSV is the client's job, and a server
+ * that accepts a file has to decide about encodings, delimiters and header rows
+ * before it can do anything useful with them. The cap is a class, not a
+ * university.
+ */
+const rosterImport = z.object({
+  emails: z
+    .array(z.string().trim().toLowerCase().max(150))
+    .min(1, 'No addresses to import')
+    .max(500, 'Import at most 500 addresses at a time'),
+});
+
 const examUserParams = z.object({
   id: z.coerce.number().int().positive(),
   userId: z.coerce.number().int().positive(),
@@ -224,6 +243,8 @@ module.exports = {
   updateCourse,
   joinCourse,
   courseUserParams,
+  addStaff,
+  rosterImport,
   examUserParams,
   examPaper,
   updateExam,

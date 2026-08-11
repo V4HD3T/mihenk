@@ -68,8 +68,11 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
     if (!course_id) {
       return res.status(400).json({ error: 'A course is required' });
     }
-    if (!(await access.ownsCourse(req.user, course_id))) {
+    if (!(await access.teachesCourse(req.user, course_id))) {
       return res.status(404).json({ error: 'Course not found' });
+    }
+    if (await access.courseIsArchived(course_id)) {
+      return res.status(403).json({ error: 'This course is archived and is no longer accepting changes' });
     }
     if (!title || !start_time || !end_time || !duration_minutes) {
       return res.status(400).json({ error: 'Title, start/end time, and duration are required' });

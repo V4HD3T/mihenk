@@ -14,10 +14,16 @@ router.get('/', requireAuth, async (req, res) => {
     const result =
       req.user.role === 'teacher'
         ? await pool.query(
+            // Courses they own, plus the ones they assist with. `is_owner` is
+            // returned because the interface has to know which of the two it is
+            // showing - an assistant sees no course settings.
             `SELECT c.*, (SELECT COUNT(*) FROM enrollments e WHERE e.course_id = c.id) AS student_count,
-                    (SELECT COUNT(*) FROM problems p WHERE p.course_id = c.id) AS problem_count
+                    (SELECT COUNT(*) FROM problems p WHERE p.course_id = c.id) AS problem_count,
+                    (c.created_by = $1) AS is_owner
              FROM courses c
              WHERE c.created_by = $1
+                OR EXISTS (SELECT 1 FROM course_staff cs
+                           WHERE cs.course_id = c.id AND cs.user_id = $1)
              ORDER BY c.archived ASC, c.created_at DESC`,
             [req.user.id]
           )
@@ -109,6 +115,190 @@ router.put(
   }
 );
 
+// ---------------------------------------------------------------------------
+// Teaching staff (owner only)
+// ---------------------------------------------------------------------------
+
+// GET /api/courses/:id/staff - who teaches this course besides the owner
+router.get(
+  '/:id/staff',
+  requireAuth,
+  requireRole('teacher'),
+  validate({ params: schemas.idParam }),
+  async (req, res) => {
+    try {
+      // Assistants may read the staff list - they need to know who else is on
+      // it - but only the owner may change it.
+      if (!(await access.teachesCourse(req.user, req.params.id))) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+      const result = await pool.query(
+        `SELECT u.id AS user_id, u.name, u.email, s.added_at
+         FROM course_staff s JOIN users u ON u.id = s.user_id
+         WHERE s.course_id = $1 ORDER BY u.name`,
+        [req.params.id]
+      );
+      const owner = await pool.query(
+        `SELECT u.id AS user_id, u.name, u.email
+         FROM courses c JOIN users u ON u.id = c.created_by WHERE c.id = $1`,
+        [req.params.id]
+      );
+      res.json({ owner: owner.rows[0] || null, assistants: result.rows });
+    } catch (err) {
+      logger.error({ err }, 'Staff list failed');
+      res.status(500).json({ error: 'Failed to fetch the teaching staff' });
+    }
+  }
+);
+
+// POST /api/courses/:id/staff - appoint an assistant (owner only)
+router.post(
+  '/:id/staff',
+  requireAuth,
+  requireRole('teacher'),
+  validate({ params: schemas.idParam, body: schemas.addStaff }),
+  async (req, res) => {
+    try {
+      // Owner, not merely staff: letting an assistant appoint assistants turns
+      // a delegation into a takeover, and there would be no way back for the
+      // owner short of the database.
+      if (!(await access.ownsCourse(req.user, req.params.id))) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+      const email = req.body.email.trim().toLowerCase();
+      const found = await pool.query('SELECT id, name, email, role FROM users WHERE email = $1', [
+        email,
+      ]);
+      if (found.rows.length === 0) {
+        return res.status(404).json({ error: 'No account with that address' });
+      }
+      const candidate = found.rows[0];
+
+      // A student account cannot be staff. It would be able to read every
+      // paper in the course before sitting it, and the seal that stops exactly
+      // that is keyed on the role.
+      if (candidate.role !== 'teacher') {
+        return res.status(400).json({ error: 'Only a teacher account can assist with a course' });
+      }
+      const enrolled = await pool.query(
+        'SELECT 1 FROM enrollments WHERE course_id = $1 AND user_id = $2',
+        [req.params.id, candidate.id]
+      );
+      if (enrolled.rows.length > 0) {
+        return res.status(400).json({ error: 'This person is enrolled in the course as a student' });
+      }
+      const { rows: courseRows } = await pool.query('SELECT created_by FROM courses WHERE id = $1', [
+        req.params.id,
+      ]);
+      if (courseRows[0].created_by === candidate.id) {
+        return res.status(400).json({ error: 'This person already owns the course' });
+      }
+
+      await pool.query(
+        `INSERT INTO course_staff (course_id, user_id, added_by) VALUES ($1, $2, $3)
+         ON CONFLICT (course_id, user_id) DO NOTHING`,
+        [req.params.id, candidate.id, req.user.id]
+      );
+      res.status(201).json({
+        assistant: { user_id: candidate.id, name: candidate.name, email: candidate.email },
+      });
+    } catch (err) {
+      logger.error({ err }, 'Adding staff failed');
+      res.status(500).json({ error: 'Failed to add the assistant' });
+    }
+  }
+);
+
+// DELETE /api/courses/:id/staff/:userId - stand an assistant down (owner only)
+router.delete(
+  '/:id/staff/:userId',
+  requireAuth,
+  requireRole('teacher'),
+  validate({ params: schemas.courseUserParams }),
+  async (req, res) => {
+    try {
+      if (!(await access.ownsCourse(req.user, req.params.id))) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+      await pool.query('DELETE FROM course_staff WHERE course_id = $1 AND user_id = $2', [
+        req.params.id,
+        req.params.userId,
+      ]);
+      res.json({ success: true });
+    } catch (err) {
+      logger.error({ err }, 'Removing staff failed');
+      res.status(500).json({ error: 'Failed to remove the assistant' });
+    }
+  }
+);
+
+// POST /api/courses/:id/roster/import - enrol a list of students by email
+//
+// Enrols accounts that already exist and reports the addresses that do not.
+// It deliberately does not create accounts: minting logins for people who have
+// not signed up means choosing passwords for them and deciding on their behalf
+// that they are in this system at all, which is a bigger step than a roster
+// import should take on its own.
+router.post(
+  '/:id/roster/import',
+  requireAuth,
+  requireRole('teacher'),
+  validate({ params: schemas.idParam, body: schemas.rosterImport }),
+  async (req, res) => {
+    try {
+      if (!(await access.teachesCourse(req.user, req.params.id))) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+      if (await access.courseIsArchived(req.params.id)) {
+        return res.status(403).json({ error: 'This course is archived and is no longer accepting changes' });
+      }
+
+      const emails = [...new Set(req.body.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+      const found = await pool.query(
+        `SELECT id, email, role FROM users WHERE email = ANY($1::text[])`,
+        [emails]
+      );
+      const byEmail = new Map(found.rows.map((r) => [r.email, r]));
+
+      const enrolled = [];
+      const notFound = [];
+      const notStudents = [];
+      for (const email of emails) {
+        const user = byEmail.get(email);
+        if (!user) {
+          notFound.push(email);
+          continue;
+        }
+        // A teacher account in the student roster would be given a student's
+        // view of a course they may also teach, which is two answers to the
+        // same question.
+        if (user.role !== 'student') {
+          notStudents.push(email);
+          continue;
+        }
+        const result = await pool.query(
+          `INSERT INTO enrollments (course_id, user_id) VALUES ($1, $2)
+           ON CONFLICT (course_id, user_id) DO NOTHING RETURNING user_id`,
+          [req.params.id, user.id]
+        );
+        // Already enrolled counts as enrolled: importing the same list twice
+        // must not read as a failure.
+        if (result.rows.length > 0) enrolled.push(email);
+      }
+
+      res.json({
+        enrolled,
+        alreadyEnrolled: emails.length - enrolled.length - notFound.length - notStudents.length,
+        notFound,
+        notStudents,
+      });
+    } catch (err) {
+      logger.error({ err }, 'Roster import failed');
+      res.status(500).json({ error: 'Failed to import the roster' });
+    }
+  }
+);
+
 // POST /api/courses/join - a student enrolls with the code the teacher gave out
 router.post('/join', requireAuth, validate({ body: schemas.joinCourse }), async (req, res) => {
   try {
@@ -147,7 +337,7 @@ router.get(
   validate({ params: schemas.idParam }),
   async (req, res) => {
     try {
-      if (!(await access.ownsCourse(req.user, req.params.id))) {
+      if (!(await access.teachesCourse(req.user, req.params.id))) {
         return res.status(404).json({ error: 'Course not found' });
       }
       const result = await pool.query(
@@ -176,7 +366,7 @@ router.delete(
   validate({ params: schemas.courseUserParams }),
   async (req, res) => {
     try {
-      if (!(await access.ownsCourse(req.user, req.params.id))) {
+      if (!(await access.teachesCourse(req.user, req.params.id))) {
         return res.status(404).json({ error: 'Course not found' });
       }
       const result = await pool.query(

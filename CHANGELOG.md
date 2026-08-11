@@ -2,6 +2,105 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.3.0] - More Than One Teacher
+
+Three limitations from v0.0.5, closed together because they meet on the same
+routes. A course had exactly one teacher, students could only enrol themselves
+one join code at a time, and `archived` stopped precisely one thing.
+
+### Added
+- **Teaching assistants.** A class with a lecturer and two demonstrators had to
+  share one login, which makes every grade override, accommodation and integrity
+  decision attributable to nobody in particular.
+
+  The line is drawn at the course rather than at its contents. An assistant
+  writes problems and exams, marks, grants extra time, manages rosters and reads
+  the integrity reports. An assistant **cannot** rename, archive or delete the
+  course, regenerate its join code, or appoint and remove staff. That last one is
+  the one that matters: an assistant who can appoint assistants can appoint
+  anyone, and a delegation becomes a takeover with no way back for the owner
+  short of the database.
+
+  Only a teacher account can be appointed, and not one enrolled in the course as
+  a student. A student assistant would read every paper in the course before
+  sitting it — the exam seal is keyed on the role, not on the roster.
+
+  The owner stays on `courses.created_by` and is deliberately not duplicated into
+  the new table. Two places recording the same fact is two places to disagree
+  about it; "may teach" is the union of the two.
+- **Bulk enrolment.** A join code is fine for a seminar and hopeless for a cohort
+  of two hundred. Paste a spreadsheet column, a comma-separated line or CSV rows
+  with names in them; anything that looks like an address is taken and the rest
+  of the row ignored, because making a teacher clean the file first is how a
+  feature goes unused.
+
+  It enrols accounts that already exist and **names** the addresses that do not.
+  It does not create accounts: minting logins for people who have not signed up
+  means choosing passwords for them and deciding on their behalf that they are in
+  this system at all, which is a larger step than a roster import should take on
+  its own. Running the same import twice is safe — addresses already enrolled are
+  counted, not failed.
+
+### Changed
+- **An archived course is now read-only, not merely hidden.** `archived` has
+  existed since v0.0.5 and stopped exactly one thing: joining. Its problems
+  stayed solvable, its exams stayed open and its queue kept accepting work, so
+  archiving last term's course left it running.
+
+  It now refuses new enrolments, submissions, problems and exams. It stays
+  **readable** — students can still go back over last term's work, which is the
+  entire difference between archiving a course and deleting it.
+
+  **This changes what an existing flag does.** Anyone who archived a course
+  expecting it to be inert now gets that. Anyone who archived one to hide it from
+  new joiners while a straggler finished an exam does not, and has to unarchive
+  it. No schema change carries this, which is why the migration records it as a
+  column comment and why it is called out here: it is invisible in a diff and
+  expensive to discover from behaviour.
+
+### Upgrading
+Additive. `npm run migrate` applies `012_course_staff.sql`. Rehearsed against a
+populated v2.2.0 database: no course gained an assistant, both the archived and
+active flags came through untouched, and a second run is a no-op. Read the
+archiving note above before upgrading mid-term.
+
+### Verified
+316 backend tests (was 287) and 68 frontend (was 59), both lint suites clean,
+production build green, backend suite run against a real PostgreSQL.
+
+Mutation-tested, and this release is the one where that mattered most: every
+access check in the system asked "did you create this course", and widening that
+question is exactly the edit that quietly widens more than intended.
+
+- Making `ownsCourse` accept assistants — the plausible simplification — failed
+  four tests: the assistant renamed the course, appointed another assistant,
+  stood one down, and a teacher with no appointment started seeing courses that
+  were not theirs.
+- Opening `courseScope` to every teacher failed **20 tests across six suites**,
+  including v0.0.5's original course-isolation suite: "cannot read another
+  teacher's problem", "cannot edit", "cannot delete".
+- Dropping the archived check from the submission path failed the test that says
+  an archived course takes no more work.
+- On the interface, treating every teacher as the owner failed the test that an
+  assistant is not shown controls that answer 404, and sending the raw paste
+  instead of the parsed addresses failed the import test.
+
+### Known limitations
+- Assistants are per course and all alike. There is no marker-who-cannot-see-
+  the-paper, which is the finer split a large course eventually wants.
+- Nothing is attributed in the interface yet: `exam_grade_overrides.graded_by`
+  and `exam_accommodations.granted_by` have recorded who did what since v0.0.6,
+  and no screen shows it. That is now worth showing and does not need a schema
+  change.
+- The import matches on email only. A student who signs up with a different
+  address than the one on the class list is a stranger to it.
+- An archived course still accepts grade overrides and accommodations, which is
+  deliberate — marking is what happens after a term closes — but it means
+  "read-only" is not literally true, and the line is drawn at student-visible
+  writes.
+- A course still cannot be transferred: if the owner leaves, an assistant cannot
+  take it over.
+
 ## [2.2.0] - Marks, Not Counts
 
 v0.0.7 moved grading from one string comparison to a checker per problem, and

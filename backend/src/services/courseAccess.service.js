@@ -28,7 +28,15 @@ const pool = require('../config/db');
 function courseScope(user, courseColumn, nextParamIndex) {
   if (user.role === 'teacher') {
     return {
-      sql: `EXISTS (SELECT 1 FROM courses c WHERE c.id = ${courseColumn} AND c.created_by = $${nextParamIndex})`,
+      // Owner or assistant. Before v2.3.0 this was created_by alone, which is
+      // why a course could have exactly one teacher.
+      sql: `EXISTS (
+        SELECT 1 FROM courses c
+        WHERE c.id = ${courseColumn}
+          AND (c.created_by = $${nextParamIndex}
+               OR EXISTS (SELECT 1 FROM course_staff cs
+                          WHERE cs.course_id = c.id AND cs.user_id = $${nextParamIndex}))
+      )`,
       params: [user.id],
     };
   }
@@ -125,7 +133,12 @@ async function sitsExam(user, examId, client = pool) {
 async function accessibleCourseIds(user) {
   const { rows } =
     user.role === 'teacher'
-      ? await pool.query('SELECT id FROM courses WHERE created_by = $1', [user.id])
+      ? await pool.query(
+          `SELECT id FROM courses WHERE created_by = $1
+           UNION
+           SELECT course_id AS id FROM course_staff WHERE user_id = $1`,
+          [user.id]
+        )
       : await pool.query('SELECT course_id AS id FROM enrollments WHERE user_id = $1', [user.id]);
   return rows.map((r) => r.id);
 }
@@ -146,7 +159,15 @@ async function canAccessCourse(user, courseId) {
   return rows.length > 0;
 }
 
-/** Only the owning teacher may modify a course's content. */
+/**
+ * The owner, and only the owner.
+ *
+ * Deliberately narrow. Since v2.3.0 a course can have assistants, and the line
+ * between them is drawn at the course itself rather than at its contents: an
+ * assistant marks, grants extra time and writes exams, but cannot rename the
+ * course, archive it, delete it, or appoint or remove other staff. Handing out
+ * the power to appoint staff is how a delegation becomes a takeover.
+ */
 async function ownsCourse(user, courseId) {
   if (user.role !== 'teacher') return false;
   const { rows } = await pool.query(
@@ -154,6 +175,47 @@ async function ownsCourse(user, courseId) {
     [courseId, user.id]
   );
   return rows.length > 0;
+}
+
+/**
+ * The owner or one of its assistants: may act on the course's *content*.
+ *
+ * This is the check almost everything wants. `ownsCourse` is the exception, for
+ * the handful of operations that are about the course rather than what is in it.
+ */
+async function teachesCourse(user, courseId) {
+  if (user.role !== 'teacher') return false;
+  const { rows } = await pool.query(
+    `SELECT 1 FROM courses c
+     WHERE c.id = $1
+       AND (c.created_by = $2
+            OR EXISTS (SELECT 1 FROM course_staff cs
+                       WHERE cs.course_id = c.id AND cs.user_id = $2))`,
+    [courseId, user.id]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Is this course closed to changes?
+ *
+ * `archived` has existed since v0.0.5 and stopped exactly one thing: joining.
+ * Its problems stayed solvable and its exams stayed open, so archiving last
+ * term's course left it running. From v2.3.0 it means read-only, and the places
+ * that write ask here.
+ */
+async function courseIsArchived(courseId) {
+  const { rows } = await pool.query('SELECT archived FROM courses WHERE id = $1', [courseId]);
+  return rows.length > 0 && rows[0].archived === true;
+}
+
+/** The archived check for a write that names a problem rather than a course. */
+async function problemsCourseIsArchived(problemId) {
+  const { rows } = await pool.query(
+    'SELECT c.archived FROM problems p JOIN courses c ON c.id = p.course_id WHERE p.id = $1',
+    [problemId]
+  );
+  return rows.length > 0 && rows[0].archived === true;
 }
 
 async function canAccessProblem(user, problemId) {
@@ -178,7 +240,10 @@ async function ownsProblem(user, problemId) {
   if (user.role !== 'teacher') return false;
   const { rows } = await pool.query(
     `SELECT 1 FROM problems p JOIN courses c ON c.id = p.course_id
-     WHERE p.id = $1 AND c.created_by = $2`,
+     WHERE p.id = $1
+       AND (c.created_by = $2
+            OR EXISTS (SELECT 1 FROM course_staff cs
+                       WHERE cs.course_id = c.id AND cs.user_id = $2))`,
     [problemId, user.id]
   );
   return rows.length > 0;
@@ -189,7 +254,10 @@ async function ownsExam(user, examId) {
   if (user.role !== 'teacher') return false;
   const { rows } = await pool.query(
     `SELECT 1 FROM exams x JOIN courses c ON c.id = x.course_id
-     WHERE x.id = $1 AND c.created_by = $2`,
+     WHERE x.id = $1
+       AND (c.created_by = $2
+            OR EXISTS (SELECT 1 FROM course_staff cs
+                       WHERE cs.course_id = c.id AND cs.user_id = $2))`,
     [examId, user.id]
   );
   return rows.length > 0;
@@ -258,6 +326,9 @@ module.exports = {
   accessibleCourseIds,
   canAccessCourse,
   ownsCourse,
+  teachesCourse,
+  courseIsArchived,
+  problemsCourseIsArchived,
   ownsProblem,
   ownsExam,
   canAccessProblem,
