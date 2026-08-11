@@ -1,6 +1,6 @@
 {
   "name": "mihenk-backend",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Cloud-Based Multi-Platform Coding Education and Exam System - Backend API",
   "main": "src/server.js",
   "type": "commonjs",

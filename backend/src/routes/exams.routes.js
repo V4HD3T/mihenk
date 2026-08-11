@@ -424,6 +424,11 @@ router.get('/:id/results', requireAuth, requireRole('teacher'), async (req, res)
       `SELECT u.id AS user_id, u.name, u.email,
               p.id AS problem_id, p.title AS problem_title,
               MAX(s.passed_count) AS best_passed, MAX(s.total_count) AS total_count,
+              -- The weighted score of the best attempt. NULL for anything
+              -- graded before v2.2.0, which the reader falls back from rather
+              -- than treating as a zero.
+              (ARRAY_AGG(s.earned_weight ORDER BY s.passed_count DESC, s.submitted_at ASC))[1] AS earned_weight,
+              (ARRAY_AGG(s.total_weight ORDER BY s.passed_count DESC, s.submitted_at ASC))[1] AS total_weight,
               o.score AS override_score, o.max_score AS override_max,
               o.feedback AS override_feedback, o.graded_at AS override_at,
               -- The penalty that applies is the one attached to the best
@@ -444,7 +449,12 @@ router.get('/:id/results', requireAuth, requireRole('teacher'), async (req, res)
     );
 
     const results = result.rows.map((row) => {
-      const autoScore = Number(row.best_passed);
+      // Weighted where the submission carries a weight, counted where it does
+      // not. Both are "how much of this problem did they get right"; the
+      // weighted one just knows that not every test case is worth the same.
+      const weighed = row.total_weight != null && Number(row.total_weight) > 0;
+      const autoScore = weighed ? Number(row.earned_weight) : Number(row.best_passed);
+      const autoMax = weighed ? Number(row.total_weight) : Number(row.total_count);
       const penalty = row.is_late ? Number(row.late_penalty_percent || 0) : 0;
       // Rounded up, so a penalty never costs more than it says it does.
       const afterPenalty = Math.ceil(autoScore * (1 - penalty / 100));
@@ -452,14 +462,16 @@ router.get('/:id/results', requireAuth, requireRole('teacher'), async (req, res)
         ...row,
         is_late: Boolean(row.is_late),
         late_penalty_percent: penalty,
+        is_weighted: weighed,
         // Kept beside the penalised figure so a teacher can see what the
         // lateness cost before deciding whether to waive it.
         auto_score: autoScore,
+        auto_max: autoMax,
         // What the grade actually is, after the late penalty and any override.
         // An override is a deliberate human decision and outranks the penalty -
         // it is how a teacher waives one.
         final_score: row.override_score ?? afterPenalty,
-        final_max: row.override_max ?? Number(row.total_count),
+        final_max: row.override_max ?? autoMax,
         is_overridden: row.override_score !== null,
       };
     });

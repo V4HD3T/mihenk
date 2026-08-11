@@ -198,6 +198,11 @@
     },
     "problemDescription": "Soru açıklaması",
     "starterCode": "{language} başlangıç kodu",
+    "weight": "Değeri",
+    "sectionFor": "{number}. testin bölümü",
+    "sectionPlaceholder": "Bölüm (isteğe bağlı)",
+    "judgedBy": "Değerlendirme",
+    "checkerFromProblem": "Problemdeki gibi",
     "checkerLabel": "Çıktı nasıl değerlendirilsin?",
     "checker": {
       "exact": "Birebir eşleşme",

@@ -187,6 +187,67 @@ describe('solving a problem', () => {
     expect(await screen.findByText(/time limit exceeded/i, {}, { timeout: 5000 })).toBeInTheDocument();
   }, 10000);
 
+  it('explains a partial score by rubric section', async () => {
+    // The point of weighting test cases is that a partial mark can be read.
+    // "7 / 10" is a mark; "edge cases 0 / 2" is the thing to go and fix.
+    signIn({ role: 'student' });
+    stub({
+      'GET /problems/1': PROBLEM,
+      'GET /drafts': { draft: null },
+      'POST /submissions': { submission: { id: 9 }, status: 'queued' },
+      'DELETE /drafts': { success: true },
+      'GET /submissions/9': {
+        status: 'completed',
+        passedCount: 2,
+        totalCount: 4,
+        results: [
+          { test_case_id: 1, passed: true, verdict: 'accepted' },
+          { test_case_id: 2, passed: true, verdict: 'accepted' },
+          { test_case_id: 3, passed: false, verdict: 'wrong_answer', verdictLabel: 'Wrong answer' },
+          { test_case_id: 4, passed: false, verdict: 'wrong_answer', verdictLabel: 'Wrong answer' },
+        ],
+        groups: [
+          { label: 'algorithm', earned: 8, total: 8, passed: 2, count: 2 },
+          { label: 'edge cases', earned: 0, total: 2, passed: 0, count: 2 },
+        ],
+      },
+    });
+    renderApp(<ProblemSolve />, { route: '/problem/1', path: '/problem/:id' });
+
+    await screen.findByLabelText(/code editor/i);
+    await userEvent.click(screen.getByRole('button', { name: /submit/i }));
+
+    expect(await screen.findByText('edge cases', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText('0 / 2')).toBeInTheDocument();
+    expect(screen.getByText('8 / 8')).toBeInTheDocument();
+  }, 10000);
+
+  it('does not invent sections when the teacher wrote none', async () => {
+    // An unlabelled group is the same information as the count already shown,
+    // and a section called "" would be worse than nothing.
+    signIn({ role: 'student' });
+    stub({
+      'GET /problems/1': PROBLEM,
+      'GET /drafts': { draft: null },
+      'POST /submissions': { submission: { id: 9 }, status: 'queued' },
+      'DELETE /drafts': { success: true },
+      'GET /submissions/9': {
+        status: 'completed',
+        passedCount: 1,
+        totalCount: 1,
+        results: [{ test_case_id: 1, passed: true, verdict: 'accepted' }],
+        groups: [{ label: '', earned: 1, total: 1, passed: 1, count: 1 }],
+      },
+    });
+    renderApp(<ProblemSolve />, { route: '/problem/1', path: '/problem/:id' });
+
+    await screen.findByLabelText(/code editor/i);
+    await userEvent.click(screen.getByRole('button', { name: /submit/i }));
+
+    await screen.findByText(/1 \/ 1 tests passed/i, {}, { timeout: 5000 });
+    expect(screen.queryByText('1 / 1', { selector: 'span.font-mono' })).not.toBeInTheDocument();
+  }, 10000);
+
   it('does not report integrity events outside an exam', async () => {
     signIn({ role: 'student' });
     stub({ 'GET /problems/1': PROBLEM, 'GET /drafts': { draft: null } });

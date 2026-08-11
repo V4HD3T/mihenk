@@ -347,6 +347,54 @@ export default function ProblemForm({ courses, problemId, onSaved, onCancel }) {
                 >
                   {t('teacher.deleteTest')}
                 </button>
+
+                {/* The marking scheme for this case. On its own row so the
+                    common case - one weight, no section, the problem's own
+                    checker - stays out of the way. */}
+                <div className="col-span-4 grid grid-cols-[auto_5rem_1fr_auto_10rem] gap-2 items-center pl-1 pb-1">
+                  <label htmlFor={`${uid}-tc-${idx}-weight`} className="text-xs text-inkmuted">
+                    {t('teacher.weight')}
+                  </label>
+                  <input
+                    id={`${uid}-tc-${idx}-weight`}
+                    type="number"
+                    min={0}
+                    max={1000}
+                    value={tc.weight ?? 1}
+                    onChange={(e) => updateTestCase(idx, 'weight', e.target.value)}
+                    className="w-full px-2 py-1 rounded-card border border-line text-xs focus:border-primary outline-none"
+                  />
+                  <div>
+                    <label htmlFor={`${uid}-tc-${idx}-group`} className="sr-only">
+                      {t('teacher.sectionFor', { number: idx + 1 })}
+                    </label>
+                    <input
+                      id={`${uid}-tc-${idx}-group`}
+                      placeholder={t('teacher.sectionPlaceholder')}
+                      value={tc.group_label ?? ''}
+                      onChange={(e) => updateTestCase(idx, 'group_label', e.target.value)}
+                      className="w-full px-2 py-1 rounded-card border border-line text-xs focus:border-primary outline-none"
+                    />
+                  </div>
+                  <label htmlFor={`${uid}-tc-${idx}-checker`} className="text-xs text-inkmuted">
+                    {t('teacher.judgedBy')}
+                  </label>
+                  <select
+                    id={`${uid}-tc-${idx}-checker`}
+                    value={tc.checker ?? ''}
+                    onChange={(e) => updateTestCase(idx, 'checker', e.target.value || null)}
+                    className="w-full px-2 py-1 rounded-card border border-line text-xs focus:border-primary outline-none"
+                  >
+                    {/* Empty is not "no checker" but "whatever the problem
+                        says", which is why it is worded rather than blank. */}
+                    <option value="">{t('teacher.checkerFromProblem')}</option>
+                    {CHECKERS.map((c) => (
+                      <option key={c} value={c}>
+                        {t(`teacher.checker.${c}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             ))}
           </div>

@@ -131,6 +131,27 @@ const schemas = {
         type: 'boolean',
         description: 'Non-sample cases are never returned to a student.',
       },
+      weight: {
+        type: 'integer',
+        minimum: 0,
+        maximum: 1000,
+        default: 1,
+        description:
+          'What this case is worth in the problem’s score. 1 everywhere reproduces the count-based scoring used before v2.2.0.',
+      },
+      group_label: {
+        type: 'string',
+        maxLength: 60,
+        description: 'Rubric section. Empty means ungrouped.',
+      },
+      checker: {
+        type: 'string',
+        enum: CHECKERS,
+        nullable: true,
+        description:
+          'Overrides the problem’s checker for this case alone. Null means the case follows the problem, which is the default.',
+      },
+      checker_config: { type: 'object', additionalProperties: true, nullable: true },
     },
   },
 
@@ -161,8 +182,24 @@ const schemas = {
       language: { type: 'string', enum: LANGUAGES },
       status: { type: 'string', enum: ['queued', 'running', 'completed', 'error'] },
       verdict: { type: 'string', enum: VERDICTS, nullable: true },
-      passed_count: { type: 'integer' },
+      passed_count: { type: 'integer', description: 'Test cases passed. Counts cases, not marks.' },
       total_count: { type: 'integer' },
+      earned_weight: {
+        type: 'integer',
+        nullable: true,
+        description:
+          'The weighted score, where each test case counts for its own weight. Null for submissions graded before v2.2.0 — unknown rather than zero, and readers fall back to the counts.',
+      },
+      total_weight: { type: 'integer', nullable: true },
+      is_late: {
+        type: 'boolean',
+        description: 'Accepted inside the exam’s late window rather than before the deadline.',
+      },
+      late_penalty_percent: {
+        type: 'integer',
+        description:
+          'The penalty in force when this submission was accepted, recorded here rather than read from the exam later.',
+      },
       submitted_at: { type: 'string', format: 'date-time' },
     },
   },

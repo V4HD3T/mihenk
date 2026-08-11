@@ -162,6 +162,120 @@ describe('unordered_tokens checker', () => {
   });
 });
 
+describe('which checker judges a test case (v2.2.0)', () => {
+  // This decision used to live inline in the grading loop, where the only way
+  // to reach it was through a container - so a mutation that ignored the test
+  // case's own checker entirely passed the whole suite. It is a function now
+  // for exactly that reason.
+  const problemConfig = { tolerance: 0.5 };
+
+  it('falls back to the problem when the case sets none', async () => {
+    const { checkerFor } = await import('../src/services/codeExecution.service.js');
+    expect(checkerFor({}, 'float', problemConfig)).toEqual({
+      checker: 'float',
+      config: problemConfig,
+    });
+  });
+
+  it('uses the case’s own checker when it sets one', async () => {
+    const { checkerFor } = await import('../src/services/codeExecution.service.js');
+    const { checker } = checkerFor({ checker: 'unordered_lines' }, 'exact', {});
+    expect(checker).toBe('unordered_lines');
+  });
+
+  it('does not leak the problem’s config into the case’s checker', async () => {
+    // The problem's tolerance belongs to the problem's checker. Handing it to a
+    // different checker on the case would apply a number chosen for one
+    // comparison to another one entirely.
+    const { checkerFor } = await import('../src/services/codeExecution.service.js');
+    const { config } = checkerFor({ checker: 'float' }, 'float', problemConfig);
+    expect(config).toEqual({});
+  });
+
+  it('defaults to exact when neither says anything', async () => {
+    const { checkerFor } = await import('../src/services/codeExecution.service.js');
+    expect(checkerFor({}, null, null)).toEqual({ checker: 'exact', config: {} });
+  });
+
+  it('actually changes the verdict, end to end through check()', async () => {
+    // The pair that matters: the same output judged by the problem's checker
+    // and by the case's own, with opposite results. Asserting on the names
+    // alone would not catch a wiring mistake that never reaches the comparison.
+    const { checkerFor } = await import('../src/services/codeExecution.service.js');
+    const deferring = checkerFor({}, 'exact', {});
+    const overriding = checkerFor({ checker: 'float', checker_config: { tolerance: 0.01 } }, 'exact', {});
+
+    expect(check('3.14000001', '3.14', deferring.checker, deferring.config).passed).toBe(false);
+    expect(check('3.14000001', '3.14', overriding.checker, overriding.config).passed).toBe(true);
+  });
+});
+
+describe('weighted scoring (v2.2.0)', () => {
+  // Shorthand: a graded result row, passing or not, with a weight and section.
+  const tc = (passed, weight = 1, group_label = '') => ({ passed, weight, group_label });
+
+  it('is the plain count when every case weighs 1', async () => {
+    // The compatibility property, and the one that matters most: every test
+    // case that existed before this release weighs 1, so no problem in any
+    // installation is re-marked by the upgrade.
+    const { weigh } = await import('../src/services/codeExecution.service.js');
+    const { earnedWeight, totalWeight } = weigh([tc(true), tc(false), tc(true)]);
+    expect(earnedWeight).toBe(2);
+    expect(totalWeight).toBe(3);
+  });
+
+  it('lets one case matter more than another', async () => {
+    const { weigh } = await import('../src/services/codeExecution.service.js');
+    // Solved the algorithm, missed an edge case.
+    const solved = weigh([tc(true, 8), tc(false, 1), tc(false, 1)]);
+    // Failed the algorithm, handled both edge cases.
+    const notSolved = weigh([tc(false, 8), tc(true, 1), tc(true, 1)]);
+
+    expect(solved.earnedWeight).toBe(8);
+    expect(notSolved.earnedWeight).toBe(2);
+    // Counting test cases scored these the other way round: 1/3 against 2/3.
+    expect(solved.earnedWeight).toBeGreaterThan(notSolved.earnedWeight);
+  });
+
+  it('treats a missing weight as 1 rather than as 0', async () => {
+    // A row read from a database migrated but never edited has no weight in
+    // the object at all. Reading that as zero would mark every old problem
+    // out of nothing.
+    const { weigh, weightOf } = await import('../src/services/codeExecution.service.js');
+    expect(weightOf({})).toBe(1);
+    expect(weigh([{ passed: true }, { passed: false }]).totalWeight).toBe(2);
+  });
+
+  it('allows a weight of 0 without making the paper unmarkable', async () => {
+    const { weigh } = await import('../src/services/codeExecution.service.js');
+    const { earnedWeight, totalWeight } = weigh([tc(true, 0), tc(true, 5)]);
+    expect(earnedWeight).toBe(5);
+    expect(totalWeight).toBe(5);
+  });
+
+  it('breaks the score down by section', async () => {
+    // The difference between a mark and feedback: "edge cases 0/2" says what
+    // to go and look at, where a bare 8/10 does not.
+    const { weigh } = await import('../src/services/codeExecution.service.js');
+    const { groups } = weigh([
+      tc(true, 4, 'algorithm'),
+      tc(true, 4, 'algorithm'),
+      tc(false, 1, 'edge cases'),
+      tc(false, 1, 'edge cases'),
+    ]);
+    const byLabel = Object.fromEntries(groups.map((g) => [g.label, g]));
+    expect(byLabel.algorithm).toMatchObject({ earned: 8, total: 8, passed: 2, count: 2 });
+    expect(byLabel['edge cases']).toMatchObject({ earned: 0, total: 2, passed: 0, count: 2 });
+  });
+
+  it('collects unlabelled cases under one empty section rather than inventing names', async () => {
+    const { weigh } = await import('../src/services/codeExecution.service.js');
+    const { groups } = weigh([tc(true), tc(false)]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBe('');
+  });
+});
+
 describe('regex checker', () => {
   it('must match the whole output, not merely appear in it', () => {
     expect(passes('451', '\\d{3}', 'regex')).toBe(true);

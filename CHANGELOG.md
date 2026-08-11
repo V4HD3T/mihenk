@@ -2,6 +2,93 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.2.0] - Marks, Not Counts
+
+v0.0.7 moved grading from one string comparison to a checker per problem, and
+scored the result by counting test cases. Counting is the part that stayed
+wrong: a one-line edge case counted as much as the case that checks the
+algorithm, so a student who solved the problem and missed an empty-input check
+scored *below* one who got the algorithm wrong and happened to handle empty
+input. Both were 2/3 and 1/3 the wrong way round.
+
+### Added
+- **A weight per test case.** What a case is worth is now the teacher's
+  decision. Every existing case weighs 1, which makes the weighted score
+  identical to the count it replaces, so no problem anywhere is re-marked by
+  this release.
+
+  0 is allowed and useful: a case that must pass to be graded at all but carries
+  no marks of its own.
+- **Rubric sections.** Cases can share a label, and a submission comes back with
+  the score broken down by it. A bare 7/10 is a mark; "edge cases 0/2" is the
+  thing to go and fix. Sections appear only where a teacher wrote them - an
+  unlabelled group says nothing the count above it did not already say, so it is
+  not rendered.
+- **A checker per test case.** v0.0.7 made the checker a property of the
+  problem, which is right for most problems and wrong for any that asks for more
+  than one kind of answer: "print the mean, then the sorted values" wants a float
+  tolerance on the first line and an exact comparison on the rest, and could have
+  neither.
+
+  A case with no checker of its own is stored as NULL rather than as a copy of
+  the problem's, so changing the problem's checker later still moves it. The
+  config travels with the checker and never mixes - a tolerance chosen for the
+  problem's `float` is not handed to a different checker on a case.
+
+`passed_count` and `total_count` keep their meaning exactly: they count test
+cases, they are on the public API, and plenty of the interface reads them. The
+weighted score is recorded beside them. On a submission graded before this
+release it is NULL - unknown rather than zero - and every reader falls back to
+the counts. Backfilling would have been a lie about work that was never weighed.
+
+Weights and section names reach students for hidden cases too. What a question
+is worth is the marking scheme, not the answer to it, and a student who cannot
+see that the edge cases carry a tenth of the marks cannot tell a near miss from
+a wrong approach.
+
+### Upgrading
+Additive. `npm run migrate` applies `011_weighted_grading.sql`. Rehearsed against
+a populated v2.1.0 database: existing cases came out weighing 1 with a NULL
+checker and no section, the problem's own checker untouched, the old submission's
+weighted score NULL beside an intact 2/2, and a second run a no-op.
+
+### Verified
+287 backend tests (was 268) and 59 frontend (was 57), both lint suites clean,
+production build green, backend suite run against a real PostgreSQL.
+
+### Note on a mutation that got away
+Mutation-tested as usual, and the third mutation is the one worth writing down.
+Making the grading loop ignore a test case's own checker entirely - so the
+problem's always won - **passed all eight integration tests**. They asserted that
+weights and checkers were stored and returned, and never that grading used them.
+
+The reason is structural: the decision lived inline in the loop that runs the
+containers, so the only way to reach it was through Docker, and a decision that
+can only be tested with Docker is a decision that does not get tested. It is a
+named function now, and the mutation fails three tests - including one that runs
+the same output through both answers and asserts the verdicts differ, because
+asserting on the checker's *name* would not have caught a wiring mistake that
+never reaches the comparison.
+
+The other mutations behaved: reading a missing weight as 0 (which would mark
+every pre-upgrade problem out of nothing) failed one test, ignoring weights in
+favour of the pass count failed two, leaking the problem's config into a case's
+own checker failed one, and on the interface, rendering unlabelled sections
+failed one while rendering no sections at all failed another.
+
+### Known limitations
+- Weights are per test case, so partial credit within a *single* case - half
+  marks for output that is close - is still not expressible.
+- A section is a label with no order of its own; sections come out in the order
+  their first case appears.
+- Exam results use the weighted score where one exists and the counts where it
+  does not, so a paper spanning the upgrade mixes both. The migration cannot fix
+  this without inventing weights for work already graded.
+- Nothing verifies that a problem's weights add up to anything in particular. A
+  paper marked out of 7 is a valid paper.
+- No performance or complexity testing beyond the wall clock, which was the
+  third item v0.0.7 left open and is not addressed here.
+
 ## [2.1.0] - Exam Paper Control
 
 Four things a teacher could not decide about their own exam. The first is the

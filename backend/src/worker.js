@@ -68,7 +68,8 @@ async function gradeSubmission(job) {
   if (!submission) throw new Error(`Submission ${submissionId} not found`);
 
   const testCasesResult = await pool.query(
-    'SELECT id, input, expected_output, is_sample FROM test_cases WHERE problem_id = $1 ORDER BY ord ASC',
+    `SELECT id, input, expected_output, is_sample, checker, checker_config, weight, group_label
+     FROM test_cases WHERE problem_id = $1 ORDER BY ord ASC`,
     [submission.problem_id]
   );
 
@@ -99,17 +100,27 @@ async function gradeSubmission(job) {
     verdictLabel: r.verdictLabel,
     verdictReason: r.verdictReason,
     is_sample: r.is_sample,
+    // Safe for hidden tests: what a case is worth and which section it belongs
+    // to is the marking scheme, not the answer.
+    weight: r.weight,
+    group_label: r.group_label,
     stdout: r.is_sample ? r.stdout : undefined,
     stderr: r.is_sample ? r.stderr : undefined,
     timedOut: r.timedOut,
   }));
-  const resultsJson = { results: visibleResults, compileError: gradeResult.compileError || null };
+  const resultsJson = {
+    results: visibleResults,
+    // The rubric breakdown, so a partial score can be explained rather than
+    // just reported: "edge cases 1/3" instead of a bare 7/10.
+    groups: gradeResult.groups || [],
+    compileError: gradeResult.compileError || null,
+  };
 
   await pool.query(
     `UPDATE submissions
      SET status = $1, passed_count = $2, total_count = $3, execution_time_ms = $4,
-         results_json = $5, verdict = $6
-     WHERE id = $7`,
+         results_json = $5, verdict = $6, earned_weight = $7, total_weight = $8
+     WHERE id = $9`,
     [
       gradeResult.compileError ? 'error' : 'completed',
       gradeResult.passedCount,
@@ -117,6 +128,8 @@ async function gradeSubmission(job) {
       totalTimeMs,
       JSON.stringify(resultsJson),
       gradeResult.verdict || null,
+      gradeResult.earnedWeight ?? null,
+      gradeResult.totalWeight ?? null,
       submissionId,
     ]
   );
@@ -137,6 +150,9 @@ async function gradeSubmission(job) {
     submissionId,
     passedCount: gradeResult.passedCount,
     totalCount: gradeResult.totalCount,
+    earnedWeight: gradeResult.earnedWeight ?? null,
+    totalWeight: gradeResult.totalWeight ?? null,
+    groups: gradeResult.groups || [],
     status: gradeResult.compileError ? 'error' : 'completed',
     verdict: gradeResult.verdict || null,
     compileError: gradeResult.compileError || null,

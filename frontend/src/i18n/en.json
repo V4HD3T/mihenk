@@ -198,6 +198,11 @@
     },
     "problemDescription": "Problem description",
     "starterCode": "{language} starter code",
+    "weight": "Worth",
+    "sectionFor": "Rubric section for test {number}",
+    "sectionPlaceholder": "Section (optional)",
+    "judgedBy": "Judged by",
+    "checkerFromProblem": "As the problem says",
     "checkerLabel": "How should the output be judged?",
     "checker": {
       "exact": "Exact match",

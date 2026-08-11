@@ -161,6 +161,26 @@ const problemGrading = z.object({
   memory_limit_mb: z.coerce.number().int().min(64).max(2048).nullish(),
 });
 
+/**
+ * One test case as it arrives with a new problem.
+ *
+ * `checker` absent means the case defers to the problem's, which is what every
+ * case did before v2.2.0 - so it is nullish rather than defaulted, since a
+ * default would pin the case to whatever the problem said at creation time and
+ * stop it following a later change.
+ */
+const testCase = z.object({
+  input: z.string().max(100000).optional().default(''),
+  expected_output: z.string().min(1, 'Expected output is required').max(100000),
+  is_sample: z.coerce.boolean().optional().default(false),
+  // 0 is allowed and useful: a case that must pass to be graded at all but
+  // carries no marks of its own.
+  weight: z.coerce.number().int().min(0).max(1000).optional().default(1),
+  group_label: z.string().trim().max(60).optional().default(''),
+  checker: z.enum(CHECKERS).nullish(),
+  checker_config: z.record(z.string(), z.unknown()).nullish(),
+});
+
 const archiveCourse = z.object({
   source_label: z.string().trim().min(1).max(200).optional(),
 });
@@ -189,6 +209,7 @@ module.exports = {
   LANGUAGES,
   CHECKERS,
   problemGrading,
+  testCase,
   archiveCourse,
   forgotPassword,
   resetPassword,

@@ -126,7 +126,20 @@ CREATE TABLE test_cases (
   input TEXT NOT NULL DEFAULT '',
   expected_output TEXT NOT NULL,
   is_sample BOOLEAN NOT NULL DEFAULT FALSE,
-  ord INTEGER NOT NULL DEFAULT 0
+  ord INTEGER NOT NULL DEFAULT 0,
+  -- NULL means "judge this one the way the problem says". Set, it overrides the
+  -- problem's checker for this case alone - for a problem whose output has a
+  -- float on one line and an exact string on the next.
+  checker VARCHAR(30)
+    CHECK (checker IS NULL OR checker IN
+      ('exact', 'case_insensitive', 'float', 'unordered_lines', 'unordered_tokens', 'regex')),
+  checker_config JSONB,
+  -- What this case is worth. Grading counted cases before v2.2.0, so a one-line
+  -- edge case counted as much as the case that checks the algorithm.
+  weight INTEGER NOT NULL DEFAULT 1 CHECK (weight >= 0 AND weight <= 1000),
+  -- The rubric section this case belongs to, so a failure reads as
+  -- "edge cases: 1/3" rather than as anonymous red dots. Empty = ungrouped.
+  group_label VARCHAR(60) NOT NULL DEFAULT ''
 );
 
 -- Exams
@@ -200,6 +213,11 @@ CREATE TABLE submissions (
   -- penalty weeks after the paper was graded.
   is_late BOOLEAN NOT NULL DEFAULT FALSE,
   late_penalty_percent INTEGER NOT NULL DEFAULT 0,
+  -- The weighted score, beside the counts rather than instead of them:
+  -- passed_count and total_count count test cases and are on the public API.
+  -- NULL means graded before weights existed - unknown, not zero.
+  earned_weight INTEGER,
+  total_weight INTEGER,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -319,4 +337,5 @@ INSERT INTO schema_migrations (filename) VALUES
   ('007_evaluation.sql'),
   ('008_similarity_archive.sql'),
   ('009_account_recovery.sql'),
-  ('010_exam_paper_control.sql');
+  ('010_exam_paper_control.sql'),
+  ('011_weighted_grading.sql');

@@ -1,7 +1,7 @@
 # Mihenk
 
 **Cloud-Based Multi-Platform Coding Education and Exam System**
-**Version 2.1.0**
+**Version 2.2.0**
 
 A coding education platform where students write, compile, and test Python, C++, Java,
 JavaScript, C and Go code directly in the browser, and teachers create problems/exams, grade
@@ -111,7 +111,8 @@ Problems and exams belong to a course, and you only ever see the courses you are
 | Per-class separation of students and content | Courses + enrolment: students see only the courses they joined, teachers only the ones they own |
 | Exam integrity and fairness | Randomised per-student problem pools, per-exam rosters so a make-up sitting is invisible to the students still due to take it, tab/paste/fullscreen monitoring, per-student time extensions, teacher grade overrides |
 | Setting the paper | Question order, marks per question, and a late window with a penalty that is recorded on the submission rather than recomputed later |
-| Grading that doesn't punish formatting | Per-problem output checkers (float tolerance, unordered, regex) and classified verdicts explaining each failure |
+| Grading that doesn't punish formatting | Output checkers per problem *and* per test case (float tolerance, unordered, regex), and classified verdicts explaining each failure |
+| Marking that reflects what was asked | Weighted test cases and named rubric sections, so a partial score reads as "edge cases 0/2" rather than a bare 7/10 |
 | Absorbing an exam-day rush | Autoscaling worker pool sized to the queue, with Prometheus metrics; measured at 60 simultaneous submissions graded in 17s on one laptop |
 
 ## Scope and limitations of this release
@@ -218,6 +219,14 @@ An exam now has a roster, and an empty one means the whole course, so no existin
 exam changed. The same release gave the teacher the rest of the paper: the order
 of the questions, the marks each is worth, and a late window with a penalty that
 is stamped on the submission rather than recomputed weeks later.
+
+v2.2.0 fixed what v0.0.7 left half-done. That release taught the grader to judge
+output properly but still scored it by counting test cases, so a one-line edge
+case counted as much as the case that checks the algorithm — a student who
+solved the problem and missed an empty-input check scored below one who got the
+algorithm wrong and handled empty input. Cases now carry a weight and a rubric
+section, and a checker of their own where the problem's is wrong for them. Every
+existing case weighs 1, so nothing already written is re-marked.
 
 Still worth adding before a high-risk public deployment: HTTPS, a managed PostgreSQL/Redis
 instance (e.g. RDS/ElastiCache), centralized log aggregation, and — if the threat model warrants

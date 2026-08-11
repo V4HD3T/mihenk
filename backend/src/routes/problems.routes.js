@@ -58,8 +58,13 @@ router.get('/:id', requireAuth, async (req, res) => {
     const problem = problemResult.rows[0];
 
     const showAllTests = req.user.role === 'teacher';
+    // Weight and section are the marking scheme rather than the answer, so a
+    // student sees them for hidden cases too - that is what lets the interface
+    // say what a question is worth before it is attempted.
     const testCasesResult = await pool.query(
-      `SELECT id, input, expected_output, is_sample FROM test_cases
+      `SELECT id, input, expected_output, is_sample, weight, group_label,
+              checker, checker_config
+       FROM test_cases
        WHERE problem_id = $1 ${showAllTests ? '' : 'AND is_sample = TRUE'}
        ORDER BY ord ASC, id ASC`,
       [req.params.id]
@@ -86,6 +91,17 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
     }
     if (!testCases || testCases.length === 0) {
       return res.status(400).json({ error: 'You must add at least one test case' });
+    }
+    // Parsed rather than trusted: weights and per-case checkers go straight into
+    // a CHECK-constrained column, and a bad value should be a 400 here instead
+    // of a constraint violation surfacing as a 500 halfway through the insert.
+    const parsedCases = [];
+    for (const raw of testCases) {
+      const parsed = schemas.testCase.safeParse(raw);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues[0].message });
+      }
+      parsedCases.push(parsed.data);
     }
     if (!course_id) {
       return res.status(400).json({ error: 'A course is required' });
@@ -123,12 +139,25 @@ router.post('/', requireAuth, requireRole('teacher'), async (req, res) => {
       );
       const problem = problemResult.rows[0];
 
-      for (let i = 0; i < testCases.length; i++) {
-        const tc = testCases[i];
+      for (let i = 0; i < parsedCases.length; i++) {
+        const tc = parsedCases[i];
         await client.query(
-          `INSERT INTO test_cases (problem_id, input, expected_output, is_sample, ord)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [problem.id, tc.input || '', tc.expected_output, !!tc.is_sample, i]
+          `INSERT INTO test_cases (problem_id, input, expected_output, is_sample, ord,
+                                   weight, group_label, checker, checker_config)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            problem.id,
+            tc.input || '',
+            tc.expected_output,
+            !!tc.is_sample,
+            i,
+            tc.weight ?? 1,
+            tc.group_label || '',
+            // Null rather than the problem's value: the case defers to the
+            // problem, so changing the problem's checker later still moves it.
+            tc.checker || null,
+            tc.checker ? JSON.stringify(tc.checker_config || {}) : null,
+          ]
         );
       }
       await client.query('COMMIT');
@@ -201,13 +230,30 @@ router.post('/:id/testcases', requireAuth, requireRole('teacher'), async (req, r
     if (!(await access.ownsProblem(req.user, req.params.id))) {
       return res.status(404).json({ error: 'Problem not found' });
     }
-    const { input, expected_output, is_sample } = req.body;
+    const { input, expected_output, is_sample, weight, group_label, checker, checker_config } = req.body;
     if (!expected_output) return res.status(400).json({ error: 'Expected output is required' });
+    if (checker && !schemas.CHECKERS.includes(checker)) {
+      return res.status(400).json({ error: 'Unknown checker' });
+    }
+    if (weight != null && (!Number.isInteger(Number(weight)) || weight < 0 || weight > 1000)) {
+      return res.status(400).json({ error: 'Weight must be a whole number between 0 and 1000' });
+    }
     const result = await pool.query(
-      `INSERT INTO test_cases (problem_id, input, expected_output, is_sample, ord)
-       VALUES ($1, $2, $3, $4, (SELECT COALESCE(MAX(ord), -1) + 1 FROM test_cases WHERE problem_id = $1))
+      `INSERT INTO test_cases (problem_id, input, expected_output, is_sample, ord,
+                               weight, group_label, checker, checker_config)
+       VALUES ($1, $2, $3, $4, (SELECT COALESCE(MAX(ord), -1) + 1 FROM test_cases WHERE problem_id = $1),
+               $5, $6, $7, $8)
        RETURNING *`,
-      [req.params.id, input || '', expected_output, !!is_sample]
+      [
+        req.params.id,
+        input || '',
+        expected_output,
+        !!is_sample,
+        weight ?? 1,
+        (group_label || '').slice(0, 60),
+        checker || null,
+        checker ? JSON.stringify(checker_config || {}) : null,
+      ]
     );
     res.status(201).json({ testCase: result.rows[0] });
   } catch (err) {

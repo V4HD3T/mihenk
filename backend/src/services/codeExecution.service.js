@@ -311,6 +311,75 @@ async function executeCode(language, code, stdin = '', options = {}) {
 }
 
 /**
+ * Which checker judges this test case, and with what configuration.
+ *
+ * A case with no checker of its own defers to the problem's - that is what
+ * every case written before v2.2.0 does, and it is stored as NULL rather than
+ * as a copy of the problem's value so that changing the problem later still
+ * moves it.
+ *
+ * The config travels with the checker and never mixes: a case that sets `float`
+ * gets its own tolerance or the default, never the tolerance the problem set
+ * for some other checker.
+ *
+ * Pulled out as its own function because the alternative - reading it off the
+ * grading loop - is only reachable through a container, and a decision that can
+ * only be tested with Docker is a decision that does not get tested.
+ */
+function checkerFor(testCase, problemChecker, problemConfig) {
+  if (!testCase.checker) {
+    return { checker: problemChecker || 'exact', config: problemConfig || {} };
+  }
+  return { checker: testCase.checker, config: testCase.checker_config || {} };
+}
+
+/**
+ * What one test case is worth.
+ *
+ * Absent means 1, which is what every case written before v2.2.0 is worth and
+ * makes the weighted score identical to the count of passing cases.
+ */
+function weightOf(testCase) {
+  const w = Number(testCase.weight ?? 1);
+  return Number.isFinite(w) && w >= 0 ? w : 1;
+}
+
+/**
+ * The weighted score, and the rubric breakdown behind it.
+ *
+ * Counting test cases marked a one-line edge case as heavily as the case that
+ * checks the algorithm. `groups` is what makes a partial score explicable: a
+ * student sees "edge cases 1/3" instead of a bare 7/10, which is the difference
+ * between a mark and feedback.
+ *
+ * Cases carrying no label collect under '', which readers render as ungrouped
+ * rather than as a section called nothing.
+ */
+function weigh(results) {
+  const groups = new Map();
+  let earnedWeight = 0;
+  let totalWeight = 0;
+
+  for (const r of results) {
+    const weight = weightOf(r);
+    totalWeight += weight;
+    if (r.passed) earnedWeight += weight;
+
+    const label = r.group_label || '';
+    const group = groups.get(label) || { label, earned: 0, total: 0, passed: 0, count: 0 };
+    group.total += weight;
+    group.count += 1;
+    if (r.passed) {
+      group.earned += weight;
+      group.passed += 1;
+    }
+    groups.set(label, group);
+  }
+
+  return { earnedWeight, totalWeight, groups: [...groups.values()] };
+}
+
+/**
  * Run against all test cases for a problem - used for automatic grading.
  * Compilation happens ONLY ONCE, then the same binary/file is run against
  * each test input.
@@ -335,6 +404,8 @@ async function runTestCases(language, code, testCases, options = {}) {
           verdict: VERDICTS.COMPILE_ERROR,
           verdictLabel: 'Compile error',
           is_sample: tc.is_sample,
+          weight: weightOf(tc),
+          group_label: tc.group_label || '',
           stdout: '',
           stderr: compileResult.stderr,
           timedOut: false,
@@ -342,6 +413,11 @@ async function runTestCases(language, code, testCases, options = {}) {
         })),
         passedCount: 0,
         totalCount: testCases.length,
+        // Nothing ran, so nothing was earned - but the paper was still worth
+        // what it was worth, and a zero over a real total says that.
+        earnedWeight: 0,
+        totalWeight: testCases.reduce((sum, tc) => sum + weightOf(tc), 0),
+        groups: [],
         compileError: compileResult.stderr,
         verdict: VERDICTS.COMPILE_ERROR,
       };
@@ -367,7 +443,11 @@ async function runTestCases(language, code, testCases, options = {}) {
       // Two separate questions, deliberately kept apart: did the program run
       // successfully, and is its output the right answer? Conflating them is
       // what made every failure look identical before v0.0.7.
-      const checkResult = check(r.stdout, tc.expected_output, checker, checkerConfig);
+      //
+      // A test case may override the problem's checker (v2.2.0). Null means it
+      // does not, which is every case written before that.
+      const judge = checkerFor(tc, checker, checkerConfig);
+      const checkResult = check(r.stdout, tc.expected_output, judge.checker, judge.config);
       const { verdict, label, reason } = classify(r, checkResult);
 
       results.push({
@@ -377,6 +457,8 @@ async function runTestCases(language, code, testCases, options = {}) {
         verdictLabel: label,
         verdictReason: reason,
         is_sample: tc.is_sample,
+        weight: weightOf(tc),
+        group_label: tc.group_label || '',
         stdout: r.stdout,
         stderr: r.stderr,
         timedOut: r.timedOut,
@@ -389,6 +471,7 @@ async function runTestCases(language, code, testCases, options = {}) {
       results,
       passedCount,
       totalCount: testCases.length,
+      ...weigh(results),
       compileError: null,
       verdict: summarize(results, null),
     };
@@ -397,4 +480,14 @@ async function runTestCases(language, code, testCases, options = {}) {
   }
 }
 
-module.exports = { executeCode, runTestCases, LANGUAGE_CONFIG, LANGUAGE_RESOURCES };
+module.exports = {
+  executeCode,
+  runTestCases,
+  // Exported for the tests: scoring is the part most worth testing exhaustively
+  // and it is pure, so it should not need a container to exercise.
+  weigh,
+  weightOf,
+  checkerFor,
+  LANGUAGE_CONFIG,
+  LANGUAGE_RESOURCES,
+};

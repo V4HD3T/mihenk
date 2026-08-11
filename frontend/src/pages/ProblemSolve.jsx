@@ -414,6 +414,32 @@ export default function ProblemSolve() {
               </div>
               <ResultBubbles results={submitResult.results} totalCount={submitResult.totalCount} />
 
+              {/* The rubric breakdown, when the problem has one. A bare 7/10
+                  says a mark; "edge cases 0/2" says what to go and look at.
+                  Sections only appear when the teacher wrote them, and a single
+                  unlabelled section is the same information as the count above,
+                  so it is not repeated. */}
+              {(() => {
+                const groups = (submitResult.groups || []).filter((g) => g.label);
+                if (groups.length === 0) return null;
+                return (
+                  <ul className="mt-3 space-y-1">
+                    {groups.map((g) => (
+                      <li key={g.label} className="flex items-baseline justify-between gap-3 text-sm">
+                        <span className="text-inkmuted">{g.label}</span>
+                        <span
+                          className={`font-mono text-xs ${
+                            g.earned === g.total ? 'text-success' : 'text-error'
+                          }`}
+                        >
+                          {g.earned} / {g.total}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+
               {/* Why it failed, not just that it did. The verdict is safe to
                   show even for hidden tests: it describes how the run ended,
                   never what the expected output was. */}
